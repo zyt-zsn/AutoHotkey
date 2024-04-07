@@ -1206,10 +1206,9 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 			else --page_start;
 			--page_end;
 		}
-		int field_count = (int)mFields.Length();
-		int i = page_start, page_end_field = min(page_end, field_count);
+		int i = page_start; // But check the upper bound each iteration, since dynamic properties can add/delete fields.
 		// For each field in the requested page...
-		for ( ; i < page_end_field; ++i)
+		for ( ; i < page_end && (index_t)i < mFields.Length(); ++i)
 		{
 			Object::FieldType &field = mFields[i];
 			ExprTokenType value;
@@ -1230,7 +1229,7 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 			if (dynamic_cast<NativeFunc *>(enum_method))
 			{
 				// Built-in enumerators are always safe to call automatically.
-				aDebugger->WriteEnumItems(this, i - field_count, page_end - field_count);
+				aDebugger->WriteEnumItems(this, 0, page_end - i);
 			}
 			else
 			{
