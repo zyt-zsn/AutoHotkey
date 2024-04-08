@@ -9226,11 +9226,22 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 			{
 				if (this_postfix->callsite->param_count == 1 && this_postfix->callsite->func == sIsSetFunc)
 				{
-					if (postfix[postfix_count - 1]->symbol != SYM_VAR && postfix[postfix_count - 1]->symbol != SYM_DYNAMIC)
+					auto &last_postfix = *postfix[postfix_count - 1];
+					if (last_postfix.symbol == SYM_VAR || last_postfix.symbol == SYM_DYNAMIC)
 					{
-						return LineError(_T("IsSet requires a variable."), FAIL, this_postfix->error_reporting_marker);
+						last_postfix.var_usage = VARREF_ISSET;
+						break;
 					}
-					postfix[postfix_count - 1]->var_usage = VARREF_ISSET;
+					if (last_postfix.symbol == SYM_ASSIGN)
+					{
+						auto &left_of_assign = (&last_postfix)[-1];
+						if ((left_of_assign.symbol == SYM_VAR || left_of_assign.symbol == SYM_DYNAMIC) && left_of_assign.var_usage == VARREF_LVALUE)
+						{
+							left_of_assign.var_usage = VARREF_LVALUE_ISSET;
+							break;
+						}
+					}
+					return LineError(_T("IsSet requires a variable."), FAIL, this_postfix->error_reporting_marker);
 				}
 			}
 			break;

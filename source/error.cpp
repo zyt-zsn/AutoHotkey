@@ -792,9 +792,9 @@ ResultType Script::VarIsReadOnlyError(Var *aVar, int aErrorType)
 	TCHAR buf[127];
 	sntprintf(buf, _countof(buf), _T("This %s cannot %s.")
 		, VarKindForErrorMessage(aVar)
-		, aErrorType == VARREF_LVALUE ? _T("be assigned a value")
+		, aErrorType == VARREF_OUTPUT_VAR ? _T("be used as an output variable")
 		: aErrorType == VARREF_REF ? _T("have its reference taken")
-		: _T("be used as an output variable"));
+		: _T("be assigned a value"));
 	return ScriptError(buf, aVar->mName);
 }
 

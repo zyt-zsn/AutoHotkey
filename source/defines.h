@@ -240,7 +240,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 		|| sym == SYM_PRE_INCREMENT || sym == SYM_PRE_DECREMENT)
 
 enum VarRefUsageType { VARREF_READ = 0, VARREF_ISSET, VARREF_READ_MAYBE
-	, VARREF_REF, VARREF_LVALUE, VARREF_LVALUE_MAYBE, VARREF_OUTPUT_VAR };
+	, VARREF_REF, VARREF_LVALUE, VARREF_LVALUE_MAYBE, VARREF_LVALUE_ISSET, VARREF_OUTPUT_VAR };
 #define VARREF_IS_WRITE(var_usage) ((var_usage) >= VARREF_REF)
 #define VARREF_IS_READ(var_usage) ((var_usage) == VARREF_READ || (var_usage) == VARREF_READ_MAYBE) // But not VARREF_ISSET.
 
@@ -439,11 +439,11 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 	// overwritten by a subsequent concat/function call while still on the stack).
 	// Yielding SYM_VAR means subsequent assignments may affect it, but in a safer way
 	// that doesn't risk dangling pointers.
-	void SetVar(Var *aVar)
+	void SetVar(Var *aVar, VarRefUsageType aRefType = VARREF_READ)
 	{
 		symbol = SYM_VAR;
 		var = aVar;
-		var_usage = VARREF_READ;
+		var_usage = aRefType;
 	}
 
 private: // Force code to use one of the CopyFrom() methods, for clarity.
