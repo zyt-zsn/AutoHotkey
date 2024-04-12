@@ -1762,8 +1762,11 @@ break_loop:
 			tcslcpy(aProperties->suffix_text, omit_leading_whitespace(marker), _countof(aProperties->suffix_text)); // Protect against overflow case script ultra-long (and thus invalid) key name.
 		if (auto temp = tcscasestr(aProperties->suffix_text, _T(" Up"))) // Should be reliable detection method because leading spaces have been omitted and it's unlikely a legitimate key name will ever contain a space followed by "Up".
 		{
-			omit_trailing_whitespace(aProperties->suffix_text, temp)[1] = '\0'; // Omit " Up" from suffix_text since caller wants that.
-			aProperties->is_key_up = true; // Override the default set earlier.
+			if (!temp[3]) // Not something like "key up up", which can happen as a result of "a up::b".
+			{
+				omit_trailing_whitespace(aProperties->suffix_text, temp)[1] = '\0'; // Omit " Up" from suffix_text since caller wants that.
+				aProperties->is_key_up = true; // Override the default set earlier.
+			}
 		}
 	}
 	return marker;
@@ -1812,7 +1815,7 @@ ResultType Hotkey::TextToKey(LPCTSTR aText, bool aIsModifier, Hotkey *aThisHotke
 		if (aSyntaxCheckOnly)
 			return *keyname_end ? FAIL : OK;
 		if (*keyname_end)
-			return CONDITION_FALSE;
+			return ValueError(ERR_INVALID_HOTKEY, aText, FAIL);
 	}
 
 	HotkeyTypeType hotkey_type_temp;
