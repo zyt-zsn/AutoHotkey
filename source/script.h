@@ -3306,7 +3306,6 @@ BIF_DECL(BIF_Click);
 BIF_DECL(BIF_Reg);
 BIF_DECL(BIF_Random);
 BIF_DECL(BIF_Sound);
-BIF_DECL(BIF_CaretGetPos);
 BIF_DECL(BIF_RunWait);
 
 

@@ -12,6 +12,8 @@ md_func(CallbackCreate, (In, Object, Function), (In_Opt, String, Options), (In_O
 md_func(CallbackFree, (In, UIntPtr, Callback))
 #endif
 
+md_func_x(CaretGetPos, CaretGetPos, Bool32, (Out_Opt, Variant, X), (Out_Opt, Variant, Y))
+
 md_func(ClipWait, (In_Opt, Float64, Timeout), (In_Opt, Int32, AnyType), (Ret, Bool32, RetVal))
 
 md_func(ControlAddItem, (In, String, Value), MD_CONTROL_ARGS, (Ret, IntPtr, Index))

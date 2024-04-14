@@ -37,7 +37,6 @@ FuncEntry g_BIF[] =
 	BIFn(ASin, 1, 1, BIF_ASinACos),
 	BIF1(ATan, 1, 1),
 	BIF1(ATan2, 2, 2),
-	BIF1(CaretGetPos, 0, 2, {1, 2}),
 	BIFn(Ceil, 1, 1, BIF_FloorCeil),
 	BIF1(Chr, 1, 1),
 	BIF1(Click, 0, 6),
