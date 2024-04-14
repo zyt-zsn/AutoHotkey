@@ -191,13 +191,12 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			}
 			if (this_token.symbol == SYM_VAR && (!VARREF_IS_WRITE(this_token.var_usage) || this_token.var_usage == VARREF_LVALUE_MAYBE))
 			{
-				if (this_token.var->Type() == VAR_VIRTUAL && VARREF_IS_READ(this_token.var_usage))
+				if (this_token.var->IsVirtual() && VARREF_IS_READ(this_token.var_usage))
 				{
 					// FUTURE: This should be merged with the SYM_FUNC handling at some point to improve
 					// maintainability, reduce code size, and take advantage of SYM_FUNC's optimizations.
 					ResultToken result_token;
 					result_token.InitResult(left_buf);
-					result_token.symbol = SYM_INTEGER; // For _f_return_i() and consistency with BIFs.
 
 					// Call this virtual variable's getter.
 					this_token.var->Get(result_token);
@@ -809,7 +808,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					goto push_this_token;
 				}
 			}
-			ASSERT(right.var->Type() == VAR_NORMAL);
+			ASSERT(right.var->Type() == VAR_NORMAL || right.var->Type() == VAR_VIRTUAL_OBJ);
 			this_token.SetValue(right.var->GetRef());
 			if (!this_token.object)
 				goto outofmem;
@@ -2028,8 +2027,17 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 					this_formal_param.var->UpdateAlias(token.var); // Set mAliasFor.
 					continue;
 				}
-				else if (auto ref = dynamic_cast<VarRef *>(TokenToObject(token)))
+				else if (auto refobj = TokenToObject(token))
 				{
+					auto ref = dynamic_cast<VarRef *>(refobj);
+					if (!ref)
+					{
+						// The logic here is the same as below, but targeting an object which isn't a Var.
+						if (this_formal_param.var->Scope() & VAR_DOWNVAR)
+							this_formal_param.var->GetAliasFor()->UpdateVirtualObj(refobj);
+						this_formal_param.var->UpdateVirtualObj(refobj);
+						continue;
+					}
 					if (this_formal_param.var->Scope() & VAR_DOWNVAR) // This parameter's var is referenced by one or more closures.
 					{
 						ASSERT(this_formal_param.var->IsAlias());

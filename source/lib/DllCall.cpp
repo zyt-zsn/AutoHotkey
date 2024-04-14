@@ -796,7 +796,7 @@ has_valid_return_type:
 				aResultToken.symbol = SYM_STRING; // Set default for Invoke (New set aResultToken to obj without calling AddRef).
 				aResultToken.marker = _T("");
 				auto result = obj->Invoke(aResultToken, IT_SET | IF_BYPASS_METAFUNC | IF_NO_NEW_PROPS
-					, _T("__value"), ExprTokenType(obj), aParam + i + 1, 1);
+					, _T("__Value"), ExprTokenType(obj), aParam + i + 1, 1);
 				if (result == INVOKE_NOT_HANDLED)
 				{
 					if (this_param.symbol == SYM_MISSING)

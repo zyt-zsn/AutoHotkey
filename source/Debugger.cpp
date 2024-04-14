@@ -1145,7 +1145,7 @@ int Debugger::GetPropertyInfo(VarBkp &aBkp, PropertyInfo &aProp)
 
 int Debugger::GetPropertyValue(Var &aVar, PropertySource &aProp)
 {
-	if (aVar.Type() == VAR_VIRTUAL)
+	if (aVar.IsVirtual())
 	{
 		aProp.value.Free();
 		aProp.value.InitResult(aProp.value.buf);

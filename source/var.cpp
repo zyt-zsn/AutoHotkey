@@ -67,7 +67,7 @@ ResultType Var::Assign(ExprTokenType &aToken)
 // Writes aToken's value into aOutputVar based on the type of the token.
 // Caller must ensure that aToken.symbol is an operand (not an operator or other symbol).
 {
-	if (mType == VAR_VIRTUAL)
+	if (VarTypeIsVirtual(mType))
 	{
 		if (aToken.symbol == SYM_MISSING)
 			return g_script.RuntimeError(ERR_INVALID_ASSIGNMENT);
@@ -94,11 +94,28 @@ ResultType Var::Assign(ExprTokenType &aToken)
 
 ResultType Var::AssignVirtual(ExprTokenType &aValue)
 {
-	if (!mVV->Set) // Might be impossible due to prior validation of assignments/output vars.
-		return g_script.VarIsReadOnlyError(this);
 	FuncResult result_token;
-	mVV->Set(result_token, mName, aValue);
+	if (mType == VAR_VIRTUAL)
+	{
+		if (!mVV->Set) // Might be impossible due to prior validation of assignments/output vars.
+			return g_script.VarIsReadOnlyError(this);
+		mVV->Set(result_token, mName, aValue);
+	}
+	else
+	{
+		ASSERT(mType == VAR_VIRTUAL_OBJ && IsObject());
+		AssignVirtualObj(mObject, aValue, result_token);
+	}
 	return result_token.Result();
+}
+
+
+
+void Var::AssignVirtualObj(IObject *aObj, ExprTokenType &aValue, ResultToken &aResultToken)
+{
+	auto *param = &aValue;
+	if (aObj->Invoke(aResultToken, IT_SET | IF_BYPASS_METAFUNC | IF_NO_NEW_PROPS, _T("__Value"), ExprTokenType(aObj), &param, 1) == INVOKE_NOT_HANDLED)
+		aResultToken.UnknownMemberError(ExprTokenType(aObj), IT_SET, _T("__Value"));
 }
 
 
@@ -106,8 +123,7 @@ ResultType Var::AssignVirtual(ExprTokenType &aValue)
 ResultType Var::PopulateVirtualVar()
 {
 	FuncResult result_token;
-	result_token.symbol = SYM_INTEGER; // For _f_return_i() and consistency with BIFs.
-	mVV->Get(result_token, mName);
+	Get(result_token);
 	if (result_token.Exited())
 		return FAIL;
 	if (result_token.mem_to_free)
@@ -118,6 +134,12 @@ ResultType Var::PopulateVirtualVar()
 	}
 	size_t length;
 	LPTSTR value = TokenToString(result_token, result_token.buf, &length);
+	if (!length) // Avoid an indirect call to Free().
+	{
+		if (mByteCapacity)
+			*mCharContents = '\0';
+		return OK;
+	}
 	if (!AssignString(nullptr, length))
 		return FAIL;
 	tmemcpy(mCharContents, value, length + 1);
@@ -177,6 +199,16 @@ void Var::UpdateAlias(VarRef *aTargetVar)
 
 
 
+void Var::UpdateVirtualObj(IObject *aTargetRef)
+{
+	ASSERT(!IsObject());
+	mType = VAR_VIRTUAL_OBJ;
+	_SetObject(aTargetRef);
+	aTargetRef->AddRef();
+}
+
+
+
 IObject *Var::GetRef()
 {
 	auto target_var = this;
@@ -195,6 +227,12 @@ IObject *Var::GetRef()
 			target_var->mObject->AddRef();
 			return target_var->mObject;
 		}
+	}
+	else if (mType == VAR_VIRTUAL_OBJ)
+	{
+		ASSERT(mAttrib & VAR_ATTRIB_IS_OBJECT);
+		mObject->AddRef();
+		return mObject;
 	}
 	auto ref = new VarRef();
 	if (!target_var->MoveToNewFreeVar(*ref))
@@ -572,7 +610,7 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 	size_t space_needed = aLength + 1; // +1 for the zero terminator.
 	size_t space_needed_in_bytes = space_needed * sizeof(TCHAR);
 
-	if (mType == VAR_VIRTUAL)
+	if (VarTypeIsVirtual(mType))
 	{
 		if (do_assign)
 			return AssignVirtual(ExprTokenType(const_cast<LPTSTR>(aBuf), aLength));
@@ -731,14 +769,15 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 		// Below: Already verified that the length value will fit into VarSizeType.
 	}
 
-	if (mType == VAR_VIRTUAL)
+	// Writing to union is safe because above already ensured that "this" isn't an alias.
+	mByteLength = aLength * sizeof(TCHAR); // aLength was verified accurate higher above.
+	
+	if (VarTypeIsVirtual(mType))
 	{
 		// This tells Contents() not to call mVV->Get():
 		mAttrib |= VAR_ATTRIB_VIRTUAL_OPEN;
+		return OK;
 	}
-
-	// Writing to union is safe because above already ensured that "this" isn't an alias.
-	mByteLength = aLength * sizeof(TCHAR); // aLength was verified accurate higher above.
 
 	// Update mAttrib and release any object last, after it is known that the assignment has
 	// succeeded, and the new value is fully in place.  This avoids issues of reentrancy due
@@ -757,7 +796,7 @@ ResultType Var::AssignBinaryNumber(__int64 aNumberAsInt64, VarAttribType aAttrib
 	if (mType == VAR_ALIAS)
 		return mAliasFor->AssignBinaryNumber(aNumberAsInt64, aAttrib);
 
-	if (mType == VAR_VIRTUAL)
+	if (VarTypeIsVirtual(mType))
 	{
 		// Virtual vars have no binary number cache, as their value may be calculated on-demand.
 		// Additionally, THE CACHE MUST NOT BE USED due to the union containing mVV.
@@ -788,7 +827,7 @@ ResultType Var::AssignSkipAddRef(IObject *aValueToAssign)
 	if (mType == VAR_ALIAS)
 		return mAliasFor->AssignSkipAddRef(aValueToAssign);
 
-	if (mType == VAR_VIRTUAL)
+	if (VarTypeIsVirtual(mType))
 	{
 		auto result = AssignVirtual(ExprTokenType(aValueToAssign));
 		aValueToAssign->Release(); // Caller wanted us to take responsibility for this.
@@ -819,8 +858,14 @@ void Var::Get(ResultToken &aResultToken)
 {
 	if (mType == VAR_ALIAS)
 		return mAliasFor->Get(aResultToken);
-	ASSERT(mType == VAR_VIRTUAL);
-	mVV->Get(aResultToken, mName);
+	if (mType == VAR_VIRTUAL)
+	{
+		aResultToken.symbol = SYM_INTEGER; // For _f_return_i() and consistency with BIFs.
+		return mVV->Get(aResultToken, mName);
+	}
+	ASSERT(mType == VAR_VIRTUAL_OBJ && IsObject());
+	if (mObject->Invoke(aResultToken, IT_GET | IF_BYPASS_METAFUNC, _T("__Value"), ExprTokenType(mObject), nullptr, 0) == INVOKE_NOT_HANDLED)
+		aResultToken.UnknownMemberError(ExprTokenType(mObject), IT_GET, _T("__Value"));
 }
 
 
@@ -846,6 +891,15 @@ void Var::Free(int aWhenToFree)
 			// If that were done, bugs would be easy to introduce in a long function like this one
 			// if your forget at use the implicit "this" by accident.  So instead, just call self.
 			mAliasFor->Free(aWhenToFree);
+			return;
+		}
+		mType = VAR_NORMAL; // Revert alias to normal variable.
+	}
+	else if (mType == VAR_VIRTUAL_OBJ)
+	{
+		if (!(aWhenToFree & VAR_CLEAR_ALIASES))
+		{
+			ASSERT(FALSE);
 			return;
 		}
 		mType = VAR_NORMAL; // Revert alias to normal variable.

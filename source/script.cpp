@@ -12355,8 +12355,12 @@ ResultType Script::PreparseVarRefs()
 LPTSTR ListVarsHelper(LPTSTR aBuf, int aBufSize, LPTSTR aBuf_orig, VarList &aVars)
 {
 	for (int i = 0; i < aVars.mCount; ++i)
-		if (aVars.mItem[i]->Type() == VAR_NORMAL) // Don't bother showing VAR_CONSTANT; ToText() doesn't support VAR_VIRTUAL.
+		switch (aVars.mItem[i]->Type()) // Don't bother showing VAR_CONSTANT or VAR_VIRTUAL.
+		{
+		case VAR_NORMAL:
+		case VAR_VIRTUAL_OBJ:
 			aBuf = aVars.mItem[i]->ToText(aBuf, BUF_SPACE_REMAINING, true);
+		}
 	return aBuf;
 }
 

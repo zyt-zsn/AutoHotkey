@@ -36,8 +36,13 @@ enum VarTypes
 , VAR_NORMAL // Most variables, such as those created by the user, are this type.
 , VAR_CONSTANT // or as I like to say, not variable.
 , VAR_VIRTUAL
-, VAR_LAST_TYPE = VAR_VIRTUAL
+, VAR_VIRTUAL_OBJ
+// If adding to this enum, ensure range checks and VAR_LAST_TYPE remain valid.
+, VAR_LAST_TYPE = VAR_VIRTUAL_OBJ
 };
+
+// Returns true if the given var type should be evaluated by calling Var::Get(ResultToken&).
+inline bool VarTypeIsVirtual(int type) { return type >= VAR_VIRTUAL; }
 
 typedef UCHAR VarTypeType;     // UCHAR vs. VarTypes to save memory.
 typedef UCHAR AllocMethodType; // UCHAR vs. AllocMethod to save memory.
@@ -187,6 +192,7 @@ private:
 
 	// Caller has verified mType == VAR_VIRTUAL.
 	bool HasSetter() { return mVV->Set; }
+	// Caller has verified VarTypeIsVirtual(mType).
 	ResultType AssignVirtual(ExprTokenType &aValue);
 
 	// Unconditionally accepts new memory, bypassing the usual redirection to Assign() for VAR_VIRTUAL.
@@ -246,6 +252,7 @@ public:
 	ResultType AssignHWND(HWND aWnd);
 	ResultType Assign(Var &aVar);
 	ResultType Assign(ExprTokenType &aToken);
+	static void AssignVirtualObj(IObject *aObj, ExprTokenType &aValue, ResultToken &aResultToken);
 	static ResultType GetClipboardAll(void **aData, size_t *aDataSize);
 	static ResultType SetClipboardAll(void *aData, size_t aDataSize);
 	// Assign(char *, ...) has been break into four methods below.
@@ -369,7 +376,7 @@ public:
 		// IF-IS is the only caller that wouldn't cause a warning, but in that case ExpandArgs() would have
 		// already caused one.
 		SymbolType is_pure_numeric = ::IsNumeric(var.Contents(), true, false, true); // Contents() vs. mContents to support VAR_VIRTUAL lvalue in a pure expression such as "a_clipboard:=1,a_clipboard+=5"
-		if (is_pure_numeric == PURE_NOT_NUMERIC && var.mType != VAR_VIRTUAL)
+		if (is_pure_numeric == PURE_NOT_NUMERIC && !VarTypeIsVirtual(var.mType))
 			var.mAttrib |= VAR_ATTRIB_NOT_NUMERIC;
 		return is_pure_numeric;
 	}
@@ -507,7 +514,7 @@ public:
 		Var &var = *ResolveAlias();
 		// v1.0.44.14: Changed it so that ByRef/Aliases report their own name rather than the target's/caller's
 		// (it seems more useful and intuitive).
-		var.UpdateContents(); // Update mContents and mLength for use below.
+		var.Contents(); // Update mContents and mLength for use below.
 		LPTSTR aBuf_orig = aBuf;
 		switch (var.IsPureNumericOrObject())
 		{
@@ -518,6 +525,11 @@ public:
 			aBuf += sntprintf(aBuf, aBufSize, _T("%s: %s"), mName, var.mCharContents);
 			break;
 		case VAR_ATTRIB_IS_OBJECT:
+			if (var.mType == VAR_VIRTUAL_OBJ)
+			{
+				aBuf += sntprintf(aBuf, aBufSize, _T("%s[%s]: %s"), mName, mObject->Type(), var.mCharContents);
+				break;
+			}
 			aBuf = var.ObjectToText(this->mName, aBuf, aBufSize);
 			break;
 		default:
@@ -543,6 +555,11 @@ public:
 	{
 		Var &var = *ResolveAlias();
 		return var.mType;
+	}
+
+	bool IsVirtual()
+	{
+		return VarTypeIsVirtual(Type());
 	}
 
 	bool IsAlias()
@@ -741,7 +758,7 @@ public:
 			return mAliasFor->Contents(aAllowUpdate);
 		if ((mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE) && aAllowUpdate) // VAR_ATTRIB_CONTENTS_OUT_OF_DATE is checked here and in the function below, for performance.
 			UpdateContents(); // This also clears the VAR_ATTRIB_CONTENTS_OUT_OF_DATE.
-		if (mType == VAR_VIRTUAL && !(mAttrib & VAR_ATTRIB_VIRTUAL_OPEN) && aAllowUpdate)
+		if (VarTypeIsVirtual(mType) && !(mAttrib & VAR_ATTRIB_VIRTUAL_OPEN) && aAllowUpdate)
 		{
 			// This var isn't open for writing, so populate mCharContents with its current value.
 			PopulateVirtualVar();
@@ -752,7 +769,7 @@ public:
 	}
 
 	// Populate a virtual var with its current value, as a string.
-	// Caller has verified aVar->mType == VAR_VIRTUAL.
+	// Caller has verified this->IsVirtual().
 	ResultType PopulateVirtualVar();
 
 	void ConvertToNonAliasIfNecessary() // __forceinline because it's currently only called from one place.
@@ -781,6 +798,7 @@ public:
 	// Copies any internal mObject ref used for managing the lifetime of the alias.
 	void UpdateAlias(Var *aTargetVar);
 	void UpdateAlias(VarRef *aTargetVar);
+	void UpdateVirtualObj(IObject *aTargetRef);
 
 	// Unconditionally makes this var an alias of aTargetVar, without resolving aliases.
 	// Caller must ensure aTargetVar != nullptr && aTargetVar != this.
@@ -799,7 +817,7 @@ public:
 	{
 		if (mType == VAR_ALIAS)
 			return mAliasFor->Close();
-		if (mType == VAR_VIRTUAL)
+		if (VarTypeIsVirtual(mType))
 		{
 			// Commit the value in our temporary buffer.
 			auto result = AssignVirtual(ExprTokenType(mCharContents, CharLength()));

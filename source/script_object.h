@@ -562,7 +562,6 @@ public:
 	void Error__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	// For pseudo-objects:
-	static ObjectMember sValueMembers[];
 	static Object *sAnyPrototype, *sPrimitivePrototype, *sStringPrototype
 		, *sNumberPrototype, *sIntegerPrototype, *sFloatPrototype;
 	static Object *sVarRefPrototype;
