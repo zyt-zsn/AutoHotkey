@@ -127,7 +127,6 @@ FuncEntry g_BIF[] =
 	BIFn(StrLower, 1, 1, BIF_StrCase),
 	BIF1(StrPtr, 1, 1),
 	BIFn(StrPut, 1, 4, BIF_StrGetPut),
-	BIF1(StrReplace, 2, 6, {5}),
 	BIFn(StrTitle, 1, 1, BIF_StrCase),
 	BIF1(StructFromPtr, 2, 2),
 	BIFn(StrUpper, 1, 1, BIF_StrCase),

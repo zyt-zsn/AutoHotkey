@@ -356,27 +356,21 @@ BIF_DECL(BIF_StrCase)
 
 
 
-BIF_DECL(BIF_StrReplace)
+FResult StrReplace(ExprTokenType &aSource, StrArg aOldStr, optl<StrArg> aNewStr, ExprTokenType *aCaseSense, UINT *aCount, optl<UINT> aLimit
+	, ResultToken &aRetVal)
 {
 	size_t length; // Going in to StrReplace(), it's the haystack length. Later (coming out), it's the result length. 
-	_f_param_string(source, 0, &length);
-	_f_param_string(oldstr, 1);
-	_f_param_string_opt(newstr, 2);
+	auto source = TokenToString(aSource, aRetVal.buf, &length);
+	auto oldstr = const_cast<LPTSTR>(aOldStr);
+	auto newstr = const_cast<LPTSTR>(aNewStr.value_or_empty());
 
 	// Maintain this together with the equivalent section of BIF_InStr:
-	StringCaseSenseType string_case_sense = ParamIndexToCaseSense(3);
+	StringCaseSenseType string_case_sense = aCaseSense ? TokenToStringCase(*aCaseSense) : SCS_INSENSITIVE;
 	if (string_case_sense == SCS_INVALID 
 		|| string_case_sense == SCS_INSENSITIVE_LOGICAL) // Not supported, seems more useful to throw rather than using SCS_INSENSITIVE.
-		_f_throw_param(3);
+		return FR_E_ARG(3);
 
-	Var *output_var_count = ParamIndexToOutputVar(4); 
-	UINT replacement_limit = UINT_MAX;
-	if (!ParamIndexIsOmitted(5))
-	{
-		Throw_if_Param_NaN(5);
-		replacement_limit = (UINT)ParamIndexToInt64(5); 
-	}
-	
+	UINT replacement_limit = aLimit.value_or(UINT_MAX);
 
 	// Note: The current implementation of StrReplace() should be able to handle any conceivable inputs
 	// without an empty string causing an infinite loop and without going infinite due to finding the
@@ -386,21 +380,21 @@ BIF_DECL(BIF_StrReplace)
 	UINT found_count = StrReplace(source, oldstr, newstr, string_case_sense, replacement_limit, -1, &dest, &length); // Length of haystack is passed to improve performance because TokenToString() can often discover it instantaneously.
 
 	if (!dest) // Failure due to out of memory.
-		_f_throw_oom; 
+		return FR_E_OUTOFMEM;
 
 	if (dest != source) // StrReplace() allocated new memory rather than returning "source" to us unaltered.
 	{
 		// Return the newly allocated memory directly to our caller. 
-		aResultToken.AcceptMem(dest, length);
+		aRetVal.AcceptMem(dest, length);
 	}
 	else // StrReplace gave us back "source" unaltered because no replacements were needed.
 	{
-		_f_set_retval_p(dest, length); 
+		aRetVal.SetValue(dest, length); 
 	}
 
-	if (output_var_count)
-		output_var_count->Assign((DWORD)found_count);
-	_f_return_retval;
+	if (aCount)
+		*aCount = found_count;
+	return OK;
 }
 
 
