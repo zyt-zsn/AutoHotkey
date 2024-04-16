@@ -610,7 +610,6 @@ enum BuiltInFunctionID {
 	FID_TV_GetNext = 0, FID_TV_GetPrev, FID_TV_GetParent, FID_TV_GetChild, FID_TV_GetSelection, FID_TV_GetCount,
 	FID_TV_Get = 0, FID_TV_GetText,
 	FID_Trim = 0, FID_LTrim, FID_RTrim,
-	FID_RegExMatch = 0, FID_RegExReplace,
 	FID_Input = 0, FID_InputEnd,
 	FID_GetKeyName = 0, FID_GetKeyVK = 1, FID_GetKeySC,
 	FID_StrLower = 0, FID_StrUpper, FID_StrTitle,
@@ -3231,7 +3230,6 @@ BIF_DECL(BIF_InStr);
 BIF_DECL(BIF_StrCase);
 BIF_DECL(BIF_StrReplace);
 BIF_DECL(BIF_Sort);
-BIF_DECL(BIF_RegEx);
 BIF_DECL(BIF_Ord);
 BIF_DECL(BIF_Chr);
 BIF_DECL(BIF_Format);
@@ -3270,6 +3268,7 @@ BIF_DECL(BIF_Throw);
 
 BIF_DECL(Op_Object);
 BIF_DECL(Op_Array);
+BIF_DECL(Op_RegEx);
 
 BIF_DECL(BIF_ObjAddRefRelease);
 BIF_DECL(BIF_ObjBindMethod);

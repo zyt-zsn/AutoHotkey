@@ -105,8 +105,6 @@ FuncEntry g_BIF[] =
 	BIFn(RegCreateKey, 0, 1, BIF_Reg),
 	BIFn(RegDelete, 0, 2, BIF_Reg),
 	BIFn(RegDeleteKey, 0, 1, BIF_Reg),
-	BIFn(RegExMatch, 2, 4, BIF_RegEx, {3}),
-	BIFn(RegExReplace, 2, 6, BIF_RegEx, {4}),
 	BIFn(RegRead, 0, 3, BIF_Reg),
 	BIFn(RegWrite, 0, 4, BIF_Reg),
 	BIF1(Round, 1, 2),
@@ -8221,7 +8219,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 					{
 						++cp;
 						this_infix_item.callsite = new CallSite();
-						this_infix_item.callsite->func = ExprOp<BIF_RegEx, FID_RegExMatch>();
+						this_infix_item.callsite->func = ExprOp<Op_RegEx, 0>();
 						this_infix_item.callsite->param_count = 2;
 						this_infix_item.symbol = SYM_REGEXMATCH;
 					}
