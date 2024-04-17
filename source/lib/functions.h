@@ -244,6 +244,7 @@ md_func(Reload, md_arg_none)
 
 md_func(Run, (In, String, Target), (In_Opt, String, WorkingDir), (In_Opt, String, Options), (Out_Opt, Variant, PID))
 md_func_v(RunAs, (In_Opt, String, User), (In_Opt, String, Password), (In_Opt, String, Domain))
+md_func_x(RunWait, RunWait, ResultType, (In, String, Target), (In_Opt, String, WorkingDir), (In_Opt, String, Options), (In_Opt, Object, PID), (Ret, Int32, ExitCode))
 
 md_func_v(Send, (In, String, Keys))
 md_func_v(SendEvent, (In, String, Keys))

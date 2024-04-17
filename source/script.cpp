@@ -109,7 +109,6 @@ FuncEntry g_BIF[] =
 	BIFn(RegWrite, 0, 4, BIF_Reg),
 	BIF1(Round, 1, 2),
 	BIFn(RTrim, 1, 2, BIF_Trim),
-	BIF1(RunWait, 1, 4, {4}),
 	BIF1(Sin, 1, 1),
 	BIF1(Sort, 1, 3),
 	BIFn(SoundGetInterface, 1, 3, BIF_Sound),
