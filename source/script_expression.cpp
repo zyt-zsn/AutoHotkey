@@ -1767,7 +1767,7 @@ bool NativeFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aP
 			{
 				if (mOutputVars[i] <= aParamCount
 					&& aParam[mOutputVars[i]-1]->symbol != SYM_MISSING
-					&& !TokenToOutputVar(*aParam[mOutputVars[i]-1]))
+					&& !TokenIsOutputVar(*aParam[mOutputVars[i]-1]))
 				{
 					aResultToken.ParamError(mOutputVars[i]-1, aParam[mOutputVars[i]-1], _T("variable reference"), mName);
 					return false; // Abort expression.

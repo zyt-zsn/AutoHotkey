@@ -866,6 +866,7 @@ public:
 		, mScope(0), mName(_T("")), mAttrib(VAR_ATTRIB_IS_OBJECT)
 		, mHowAllocated(ALLOC_DISABLED)
 	{
+		ASSERT(aRef);
 	}
 
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}

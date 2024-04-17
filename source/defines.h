@@ -446,6 +446,11 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 		var_usage = aRefType;
 	}
 
+	bool IsOptimizedOutputVar()
+	{
+		return symbol == SYM_VAR && !VARREF_IS_READ(var_usage); // VARREF_ISSET is tolerated for use by IsSet().
+	}
+
 private: // Force code to use one of the CopyFrom() methods, for clarity.
 	ExprTokenType & operator = (ExprTokenType &other)
 	{

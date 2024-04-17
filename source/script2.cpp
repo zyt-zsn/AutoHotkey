@@ -2258,8 +2258,11 @@ type_mismatch:
 BIF_DECL(BIF_IsSet)
 {
 	Var *var = ParamIndexToOutputVar(0);
+	// var should always be non-null for IsSet due to load-time validation.
+	// IsSetRef requires the additional check since general validation permits
+	// objects which aren't VarRefs but could implement __value.
 	if (!var)
-		_f_throw_param(0, _T("variable reference"));
+		_f_throw_param(0, _T("VarRef"));
 	_f_return_b(!var->IsUninitializedNormalVar());
 }
 
@@ -2340,9 +2343,9 @@ BIF_DECL(BIF_VarSetStrCapacity)
 // 2: Requested capacity.
 {
 	Var *target_var = ParamIndexToOutputVar(0);
-	// Redundant due to prior validation of OutputVars:
-	//if (!target_var)
-	//	_f_throw_param(0, _T("variable reference"));
+	// Need to check since prior validation might have allowed a non-Var output ref object:
+	if (!target_var)
+		_f_throw_param(0, _T("VarRef"));
 	Var &var = *target_var;
 	ASSERT(var.Type() == VAR_NORMAL); // Should always be true.
 
@@ -3589,9 +3592,20 @@ StringCaseSenseType TokenToStringCase(ExprTokenType& aToken)
 
 
 
+bool TokenIsOutputVar(ExprTokenType &aToken)
+{
+	if (aToken.IsOptimizedOutputVar())
+		return true;
+	auto obj = TokenToObject(aToken);
+	return obj->IsOfType(Object::sVarRefPrototype) // It's not an Object, so the check below wouldn't work.
+		|| obj->IsOfType(Object::sPrototype) && ((Object*)obj)->HasProp(_T("__Value"));
+}
+
+
+
 Var *TokenToOutputVar(ExprTokenType &aToken)
 {
-	if (aToken.symbol == SYM_VAR && !VARREF_IS_READ(aToken.var_usage)) // VARREF_ISSET is tolerated for use by IsSet().
+	if (aToken.IsOptimizedOutputVar())
 		return aToken.var;
 	return dynamic_cast<VarRef *>(TokenToObject(aToken));
 }

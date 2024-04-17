@@ -2579,9 +2579,20 @@ ResultType Array::GetEnumItem(UINT &aIndex, Var *aVal, Var *aReserved, int aVarC
 
 bool EnumBase::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	Var *var0 = ParamIndexToOutputVar(0);
-	Var *var1 = ParamIndexToOutputVar(1);
-	auto result = Next(var0, var1);
+	Var *var[] { nullptr, nullptr };
+	for (int i = 0; i < _countof(var); ++i)
+		if (i < aParamCount)
+			if (IObject *obj = ParamIndexToObject(i))
+			{
+				var[i] = new (_alloca(sizeof(Var))) Var(obj); // mType = VAR_VIRTUAL_OBJ
+			}
+			else if (aParam[i]->symbol != SYM_MISSING)
+			{
+				aResultToken.ParamError(i, aParam[i], _T("variable reference"));
+				return false;
+			}
+
+	auto result = Next(var[0], var[1]);
 	switch (result)
 	{
 	case CONDITION_TRUE:
