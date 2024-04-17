@@ -920,6 +920,10 @@ public:
 	void *operator new[](size_t aBytes) { return malloc(aBytes); }
 	void operator delete(void *aPtr) { free(aPtr); }
 	void operator delete[](void *aPtr) { free(aPtr); }
+
+	void __Value(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+
+	static ObjectMember sMembers[];
 };
 
 

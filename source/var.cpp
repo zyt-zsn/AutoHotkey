@@ -1409,3 +1409,18 @@ ResultType Var::InitializeConstant()
 		cls->Release();
 	return result;
 }
+
+
+
+void VarRef::__Value(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if (IS_INVOKE_SET)
+	{
+		if (aParamCount)
+			Assign(*aParam[0]) || aResultToken.SetExitResult(FAIL);
+		else
+			Uninitialize();
+	}
+	else
+		ToToken(aResultToken);
+}

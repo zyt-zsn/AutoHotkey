@@ -3449,6 +3449,14 @@ ObjectMember Object::sOSErrorMembers[]
 
 
 
+ObjectMember VarRef::sMembers[]
+{
+	Object_Member(__Value, __Value, 0, IT_GET),
+	Object_Member(__Value, __Value, 0, IT_SET)
+};
+
+
+
 struct ClassDef
 {
 	LPCTSTR name;
@@ -3574,7 +3582,7 @@ void Object::CreateRootPrototypes()
 			}},
 			{_T("String"), &Object::sStringPrototype, {BIF_String, 2, 2}}
 		}},
-		{_T("VarRef"), &sVarRefPrototype}
+		{_T("VarRef"), &sVarRefPrototype, no_ctor, VarRef::sMembers, _countof(VarRef::sMembers)}
 	});
 
 	GuiControlType::DefineControlClasses();
