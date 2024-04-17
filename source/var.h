@@ -27,7 +27,7 @@ EXTERN_CLIPBOARD;
 #define SMALL_STRING_LENGTH (MAX_ALLOC_SIMPLE - 1)  // The largest string that can fit in the above.
 #define DEREF_BUF_EXPAND_INCREMENT (16 * 1024) // Reduced from 32 to 16 in v1.0.46.07 to reduce the memory utilization of deeply recursive UDFs.
 
-enum AllocMethod {ALLOC_NONE, ALLOC_SIMPLE, ALLOC_MALLOC};
+enum AllocMethod {ALLOC_NONE, ALLOC_SIMPLE, ALLOC_MALLOC, ALLOC_DISABLED};
 enum VarTypes
 {
   // The following must all be LOW numbers to avoid any realistic chance of them matching the address of
@@ -858,6 +858,14 @@ public:
 		// as below to prevent the use of SimpleHeap::Malloc().  Otherwise, each Var could allocate
 		// some memory which cannot be freed until the program exits.
 		mHowAllocated = ALLOC_MALLOC;
+	}
+
+	Var(IObject *aRef)
+		// The caller must ensure that aVarName is non-null.
+		: mType(VAR_VIRTUAL_OBJ), mObject(aRef)
+		, mScope(0), mName(_T("")), mAttrib(VAR_ATTRIB_IS_OBJECT)
+		, mHowAllocated(ALLOC_DISABLED)
+	{
 	}
 
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}

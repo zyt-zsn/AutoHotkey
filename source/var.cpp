@@ -106,7 +106,7 @@ ResultType Var::AssignVirtual(ExprTokenType &aValue)
 		ASSERT(mType == VAR_VIRTUAL_OBJ && IsObject());
 		AssignVirtualObj(mObject, aValue, result_token);
 	}
-	return result_token.Result();
+	return result_token.Exited() ? FAIL : OK; // Never EXIT, since callers are likely expecting only FAIL or OK.
 }
 
 
@@ -732,6 +732,11 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 				mHowAllocated = ALLOC_MALLOC;
 			}
 			break;
+		
+		default:
+			// ALLOC_DISABLED: Vars constructed with Var::Var(IObject*) use this for error detection.
+			ASSERT(FALSE);
+			return FAIL;
 		} // switch()
 
 		// Since above didn't return, the alloc succeeded.  Because that's true, all the members (except those
