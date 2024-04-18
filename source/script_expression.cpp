@@ -1760,21 +1760,6 @@ bool NativeFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aP
 			}
 		}
 
-		if (mOutputVars)
-		{
-			// Verify that each output parameter is either a valid var or completely omitted.
-			for (int i = 0; i < MAX_FUNC_OUTPUT_VAR && mOutputVars[i]; ++i)
-			{
-				if (mOutputVars[i] <= aParamCount
-					&& aParam[mOutputVars[i]-1]->symbol != SYM_MISSING
-					&& !TokenIsOutputVar(*aParam[mOutputVars[i]-1]))
-				{
-					aResultToken.ParamError(mOutputVars[i]-1, aParam[mOutputVars[i]-1], _T("variable reference"), mName);
-					return false; // Abort expression.
-				}
-			}
-		}
-
 	return true;
 }
 

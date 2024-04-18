@@ -1705,8 +1705,6 @@ protected:
 	NativeFunc(LPCTSTR aName) : Func(aName) {}
 
 public:
-	UCHAR *mOutputVars = nullptr; // String of indices indicating which params are output vars.
-
 	bool IsBuiltIn() override { return true; }
 
 	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount) override;
@@ -1727,7 +1725,8 @@ public:
 		BuiltInFunctionID mFID; // For code sharing: this function's ID in the group of functions which share the same C++ function.
 		void *mData;
 	};
-	
+	UCHAR *mOutputVars = nullptr; // String of indices indicating which params are output vars.
+
 	BuiltInFunc(LPCTSTR aName) : NativeFunc(aName) {}
 	BuiltInFunc(FuncEntry &);
 	BuiltInFunc(LPCTSTR aName, BuiltInFunctionType aBIF, int aMinParams, int aMaxParams, bool aIsVariadic = false, void *aData = nullptr) : BuiltInFunc(aName)
