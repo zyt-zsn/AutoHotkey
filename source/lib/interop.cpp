@@ -576,7 +576,7 @@ BIF_DECL(BIF_StrPtr)
 		_f_return((UINT_PTR)aParam[0]->marker);
 	case SYM_VAR:
 		if (!aParam[0]->var->IsPureNumericOrObject())
-			_f_return((UINT_PTR)aParam[0]->var->Contents());
+			_f_return((UINT_PTR)aParam[0]->var->Contents(FALSE)); // VAR_NORMAL and the above condition imply passing FALSE is safe.
 	default:
 		_f_throw_type(_T("String"), *aParam[0]);
 	}

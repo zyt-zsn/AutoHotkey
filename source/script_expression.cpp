@@ -1102,7 +1102,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 							// step of putting into temporary memory.
 							if (!temp_var->AssignString(NULL, (VarSizeType)result_size - 1)) // Resize the destination, if necessary.
 								goto abort; // Above should have already reported the error.
-							result = temp_var->Contents(); // Call Contents() AGAIN because Assign() may have changed it.  No need to pass FALSE because the call to Assign() above already reset the contents.
+							result = temp_var->Contents(FALSE); // Call Contents() AGAIN because Assign() may have changed it.  Update is never needed because above reset the contents.  Passing FALSE reduces code size when inlined.
 							if (left_length)
 								tmemcpy(result, left_string, left_length);  // Not +1 because don't need the zero terminator.
 							tmemcpy(result + left_length, right_string, right_length + 1); // +1 to include its zero terminator.

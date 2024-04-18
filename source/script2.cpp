@@ -3567,11 +3567,10 @@ StringCaseSenseType TokenToStringCase(ExprTokenType& aToken)
 	switch (aToken.symbol)
 	{
 	case SYM_VAR:
-		
 		switch (aToken.var->IsPureNumeric())
 		{
 		case PURE_INTEGER: int_val = aToken.var->ToInt64(); break;
-		case PURE_NOT_NUMERIC: str = aToken.var->Contents(); break;
+		case PURE_NOT_NUMERIC: str = aToken.var->Contents(FALSE); break; // Pass FALSE because it's not numeric and can't be VAR_VIRTUAL in this context.
 		case PURE_FLOAT: 
 		default:	
 			return SCS_INVALID;

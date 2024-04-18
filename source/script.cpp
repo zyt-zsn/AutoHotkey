@@ -11845,7 +11845,7 @@ ResultType Script::DerefInclude(LPTSTR &aOutput, LPTSTR aBuf)
 						if (which_pass) // 2nd pass
 						{
 							size_t var_length = var->CharLength();
-							tmemcpy(dest, var->Contents(), var_length);
+							tmemcpy(dest, var->Contents(FALSE), var_length); // Pass FALSE since first iteration already populated Contents().
 							var->Free();
 							dest += var_length;
 						}

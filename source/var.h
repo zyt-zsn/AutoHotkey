@@ -753,6 +753,9 @@ public:
 	// mContents would almost always want it up-to-date.  Any caller who wants to WRITE to mContents would
 	// would almost always have called Assign(NULL, ...) prior to calling Contents(), which would have
 	// cleared the VAR_ATTRIB_CONTENTS_OUT_OF_DATE flag.
+	// UPDATE: If the variable is known to already be "up to date", passing FALSE reduces code size,
+	// as the compiler often inlines the function and is able to optimize out the aAllowUpdate branches
+	// (although the final result can be larger if it allows the compiler to inline more functions).
 	{
 		if (mType == VAR_ALIAS)
 			return mAliasFor->Contents(aAllowUpdate);
