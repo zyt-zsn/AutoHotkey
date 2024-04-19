@@ -3608,7 +3608,10 @@ Var *TokenToOutputVar(ExprTokenType &aToken)
 {
 	if (aToken.IsOptimizedOutputVar())
 		return aToken.var;
-	return dynamic_cast<VarRef *>(TokenToObject(aToken));
+	auto obj = TokenToObject(aToken);
+	if (obj && obj->Base() == Object::sVarRefPrototype)
+		return static_cast<VarRef *>(obj);
+	return nullptr;
 }
 
 

@@ -701,7 +701,7 @@ has_valid_return_type:
 		if (this_param_obj && this_dyna_param.type != DLL_ARG_STRUCT)
 		{
 			if ((this_dyna_param.passed_by_address || this_dyna_param.type == DLL_ARG_STR)
-				&& dynamic_cast<VarRef*>(this_param_obj))
+				&& this_param_obj->Base() == Object::sVarRefPrototype)
 			{
 				aParam[i + 1] = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
 				aParam[i + 1]->SetVarRef(static_cast<VarRef*>(this_param_obj));
