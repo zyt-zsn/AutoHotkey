@@ -2000,34 +2000,30 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 						if (!ref)
 							goto free_and_return;
 						ref->Release(); // token.var retains a reference; release ours.
-						ASSERT(this_formal_param.var->IsAlias());
 						// Point our freevar to the caller's freevar, for use by our closures.
 						this_formal_param.var->GetAliasFor()->UpdateAlias(token.var);
 						// Also update our local alias below.
 					}
-					this_formal_param.var->UpdateAlias(token.var); // Set mAliasFor.
+					this_formal_param.var->UpdateAlias(token.var); // Set mAliasFor (and mObject only if var->GetRef() has been called).
 					continue;
 				}
-				else if (auto refobj = TokenToObject(token))
+				else if (IObject *refobj = TokenToObject(token))
 				{
-					auto ref = dynamic_cast<VarRef *>(refobj);
-					if (!ref)
+					if (refobj->Base() == Object::sVarRefPrototype) // Use the more efficient VAR_ALIAS for VarRef.
 					{
-						// The logic here is the same as below, but targeting an object which isn't a Var.
+						auto ref = static_cast<VarRef*>(refobj);
+						if (this_formal_param.var->Scope() & VAR_DOWNVAR) // This parameter's var is referenced by one or more closures.
+							this_formal_param.var->GetAliasFor()->UpdateAlias(ref);
+						this_formal_param.var->UpdateAlias(ref); // Set mAliasFor and mObject.
+						continue;
+					}
+					else if (ObjectCanBeOutputVar(refobj)) // use VAR_VIRTUAL_OBJ for any object except those known to lack __value.
+					{
 						if (this_formal_param.var->Scope() & VAR_DOWNVAR)
 							this_formal_param.var->GetAliasFor()->UpdateVirtualObj(refobj);
 						this_formal_param.var->UpdateVirtualObj(refobj);
 						continue;
 					}
-					if (this_formal_param.var->Scope() & VAR_DOWNVAR) // This parameter's var is referenced by one or more closures.
-					{
-						ASSERT(this_formal_param.var->IsAlias());
-						// Point our freevar to the caller's freevar, for use by our closures.
-						this_formal_param.var->GetAliasFor()->UpdateAlias(ref);
-						// Also update our local alias below.
-					}
-					this_formal_param.var->UpdateAlias(ref); // Set mAliasFor and mObject.
-					continue;
 				}
 				aResultToken.ParamError(j - (mClass ? 1 : 0), &token, _T("variable reference"), mName);
 				goto free_and_return;

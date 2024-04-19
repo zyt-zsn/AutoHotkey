@@ -3595,11 +3595,15 @@ bool TokenIsOutputVar(ExprTokenType &aToken)
 {
 	if (aToken.IsOptimizedOutputVar())
 		return true;
-	auto obj = TokenToObject(aToken);
-	return obj && (
-		obj->IsOfType(Object::sVarRefPrototype) || // It's not an Object, so the check below wouldn't work.
-		obj->IsOfType(Object::sPrototype) && ((Object*)obj)->HasProp(_T("__Value"))
-		);
+	return ObjectCanBeOutputVar(TokenToObject(aToken));
+}
+
+
+
+bool ObjectCanBeOutputVar(IObject *aObj)
+{
+	// Permit VarRef (which always works) and ComValue (which doesn't support HasProp but could work).
+	return aObj && (!aObj->IsOfType(Object::sPrototype) || ((Object*)aObj)->HasProp(_T("__Value")));
 }
 
 
