@@ -770,7 +770,7 @@ has_valid_return_type:
 				_f_throw_type(_T("String"), this_param);
 			// String needing translation: ASTR on Unicode build, WSTR on ANSI build.
 			pStr[nStr++] = new UorA(CStringCharFromWChar,CStringWCharFromChar)(TokenToString(this_param));
-			this_dyna_param.ptr = pStr[nStr-1]->GetBuffer();
+			this_dyna_param.ptr = (void*)pStr[nStr-1]->GetString();
 			break;
 
 		case DLL_ARG_DOUBLE:
@@ -1049,6 +1049,7 @@ has_valid_return_type:
 
 	// Store any output parameters back into the input variables.  This allows a function to change the
 	// contents of a variable for the following arg types: String and Pointer to <various number types>.
+	int nxStr = -1;
 	for (arg_count = 0, i = 0; i < aParamCount; ++arg_count, i += 2) // Same loop as used above, so maintain them together.
 	{
 		ExprTokenType &this_param = *aParam[i + 1];  // Resolved for performance and convenience.
@@ -1060,6 +1061,9 @@ has_valid_return_type:
 				SetObjectIntProperty(obj, _T("Ptr"), this_dyna_param.value_int64, aResultToken);
 			continue;
 		}
+
+		if (this_dyna_param.type == DLL_ARG_xSTR)
+			++nxStr; // Must be done for all args of this type in case a later arg needs its index.
 
 		if (this_param.symbol != SYM_VAR)
 			continue;
@@ -1126,9 +1130,9 @@ has_valid_return_type:
 				aResultToken.SetExitResult(FAIL);
 			break;
 		case DLL_ARG_xSTR: // AStr* on Unicode builds and WStr* on ANSI builds.
-			if (this_dyna_param.ptr != output_var.Contents(FALSE)
-				&& !output_var.AssignStringFromCodePage(UorA(LPSTR,LPWSTR)this_dyna_param.ptr))
-				aResultToken.SetExitResult(FAIL);
+			if (this_dyna_param.ptr != pStr[nxStr]->GetString())
+				if (!output_var.AssignStringFromCodePage(UorA(LPSTR,LPWSTR)this_dyna_param.ptr))
+					aResultToken.SetExitResult(FAIL);
 		}
 	}
 
