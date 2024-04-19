@@ -3596,8 +3596,10 @@ bool TokenIsOutputVar(ExprTokenType &aToken)
 	if (aToken.IsOptimizedOutputVar())
 		return true;
 	auto obj = TokenToObject(aToken);
-	return obj->IsOfType(Object::sVarRefPrototype) // It's not an Object, so the check below wouldn't work.
-		|| obj->IsOfType(Object::sPrototype) && ((Object*)obj)->HasProp(_T("__Value"));
+	return obj && (
+		obj->IsOfType(Object::sVarRefPrototype) || // It's not an Object, so the check below wouldn't work.
+		obj->IsOfType(Object::sPrototype) && ((Object*)obj)->HasProp(_T("__Value"))
+		);
 }
 
 
