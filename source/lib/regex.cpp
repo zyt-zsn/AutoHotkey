@@ -718,6 +718,7 @@ FResult RegExSearch::Replace(ExprTokenType *aReplacement, int *aOutCount, optl<i
 	// Get the replacement text (if any) from the incoming parameters.  If it was omitted, treat it as "".
 	TCHAR repl_buf[MAX_NUMBER_SIZE];
 	LPTSTR replacement = _T("");
+	size_t replacement_length = 0;
 	ResultToken result_token;
 	ExprTokenType matchobj_token, *params;
 	IObject *callback_obj = nullptr;
@@ -734,14 +735,14 @@ FResult RegExSearch::Replace(ExprTokenType *aReplacement, int *aOutCount, optl<i
 			result_token.InitResult(repl_buf);
 		}
 		else
-			replacement = TokenToString(*aReplacement, repl_buf); // TODO: support \0 in replacement
+			replacement = TokenToString(*aReplacement, repl_buf, &replacement_length);
 	}
 
 	// In PCRE, lengths and such are confined to ints, so there's little reason for using unsigned for anything.
 	int captured_pattern_count, empty_string_is_not_a_match, match_length, ref_num
 		, result_size, new_result_length, haystack_portion_length, second_iteration, substring_name_length
 		, extra_offset, pcre_options;
-	TCHAR *haystack_pos, *match_pos, *src, *src_orig, *closing_brace, *substring_name_pos;
+	TCHAR *haystack_pos, *match_pos, *src, *src_end, *src_orig, *closing_brace, *substring_name_pos;
 	TCHAR *dest, char_after_dollar
 		, substring_name[33] // In PCRE, "Names consist of up to 32 alphanumeric characters and underscores."
 		, transform;
@@ -946,30 +947,30 @@ FResult RegExSearch::Replace(ExprTokenType *aReplacement, int *aOutCount, optl<i
 						fresult = FR_FAIL;
 						goto abort;
 					}
-					replacement = TokenToString(result_token, repl_buf, &result_token.marker_length);
-					new_result_length += (int)result_token.marker_length;
+					replacement = TokenToString(result_token, repl_buf, &replacement_length);
+					new_result_length += (int)replacement_length;
 				}
 				continue;
 			}
 
 			// DOLLAR SIGN ($) is the only method supported because it simplifies the code, improves performance,
 			// and avoids the need to escape anything other than $ (which simplifies the syntax).
-			for (src = replacement; ; ++src)  // For each '$' (increment to skip over the symbol just found by the inner for()).
+			for (src = replacement, src_end = src + replacement_length; ; ++src)  // For each '$' (increment to skip over the symbol just found by the inner for()).
 			{
 				// Find the next '$', if any.
 				src_orig = src; // Init once for both loops below.
 				if (second_iteration) // Mode: copy src-to-dest.
 				{
-					while (*src && *src != '$') // While looking for the next '$', copy over everything up until the '$'.
+					while (src < src_end && *src != '$') // While looking for the next '$', copy over everything up until the '$'.
 						*dest++ = *src++;
 					result_length += (int)(src - src_orig);
 				}
 				else // This is the first iteration (mode: size-calculation).
 				{
-					for (; *src && *src != '$'; ++src); // Find the next '$', if any.
+					for (; src < src_end && *src != '$'; ++src); // Find the next '$', if any.
 					new_result_length += (int)(src - src_orig); // '$' or '\0' was found: same expansion either way.
 				}
-				if (!*src)  // Reached the end of the replacement text.
+				if (src == src_end)  // Reached the end of the replacement text.
 					break;  // Nothing left to do, so if this is the first major iteration, begin the second.
 
 				// Otherwise, a '$' has been found.  Check if it's a backreference and handle it.
