@@ -257,8 +257,7 @@ ResultType Var::MoveToNewFreeVar(Var &aFV)
 	if (mAttrib & VAR_ATTRIB_TYPES)
 	{
 		aFV.mContentsInt64 = mContentsInt64;
-		aFV.mAttrib = (mAttrib & (VAR_ATTRIB_TYPES | VAR_ATTRIB_CACHE))
-			| VAR_ATTRIB_CONTENTS_OUT_OF_DATE;
+		aFV.mAttrib = (mAttrib & (VAR_ATTRIB_TYPES | VAR_ATTRIB_CACHE | VAR_ATTRIB_CONTENTS_OUT_OF_DATE));
 		mAttrib &= ~VAR_ATTRIB_TYPES; // Mainly to remove VAR_ATTRIB_IS_OBJECT.
 	}
 	else if (mType == VAR_VIRTUAL)
