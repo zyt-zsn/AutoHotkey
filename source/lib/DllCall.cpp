@@ -694,7 +694,7 @@ has_valid_return_type:
 				_f_throw_type(_T("String"), this_param);
 			// String needing translation: ASTR on Unicode build, WSTR on ANSI build.
 			pStr[arg_count] = new UorA(CStringCharFromWChar,CStringWCharFromChar)(TokenToString(this_param));
-			this_dyna_param.ptr = pStr[arg_count]->GetBuffer();
+			this_dyna_param.ptr = (void*)pStr[arg_count]->GetString();
 			break;
 
 		case DLL_ARG_DOUBLE:
@@ -992,9 +992,9 @@ has_valid_return_type:
 				aResultToken.SetExitResult(FAIL);
 			break;
 		case DLL_ARG_xSTR: // AStr* on Unicode builds and WStr* on ANSI builds.
-			if (this_dyna_param.ptr != output_var.Contents(FALSE)
-				&& !output_var.AssignStringFromCodePage(UorA(LPSTR,LPWSTR)this_dyna_param.ptr))
-				aResultToken.SetExitResult(FAIL);
+			if (this_dyna_param.ptr != pStr[arg_count]->GetString())
+				if (!output_var.AssignStringFromCodePage(UorA(LPSTR,LPWSTR)this_dyna_param.ptr))
+					aResultToken.SetExitResult(FAIL);
 		}
 	}
 
