@@ -250,7 +250,7 @@ IObject *Var::GetRef()
 
 ResultType Var::MoveToNewFreeVar(Var &aFV)
 {
-	ASSERT(aFV.mType == VAR_NORMAL && mType == VAR_NORMAL);
+	ASSERT(aFV.mType == VAR_NORMAL && (mType == VAR_NORMAL || mType == VAR_VIRTUAL));
 	ASSERT(aFV.mHowAllocated == ALLOC_MALLOC);
 	aFV.mName = mName;   // For error reporting.
 	aFV.mScope = mScope | VAR_VARREF; // Flag it as a VarRef to allow ToReturnValue to safely optimize.
@@ -260,6 +260,11 @@ ResultType Var::MoveToNewFreeVar(Var &aFV)
 		aFV.mAttrib = (mAttrib & (VAR_ATTRIB_TYPES | VAR_ATTRIB_CACHE))
 			| VAR_ATTRIB_CONTENTS_OUT_OF_DATE;
 		mAttrib &= ~VAR_ATTRIB_TYPES; // Mainly to remove VAR_ATTRIB_IS_OBJECT.
+	}
+	else if (mType == VAR_VIRTUAL)
+	{
+		aFV.mType = VAR_VIRTUAL;
+		aFV.mVV = mVV;
 	}
 #if 0
 	// The following is currently not used because:

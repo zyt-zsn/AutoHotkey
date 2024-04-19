@@ -779,14 +779,12 @@ ResultType Script::ConflictingDeclarationError(LPCTSTR aDeclType, Var *aExisting
 
 ResultType Line::ValidateVarUsage(Var *aVar, int aUsage)
 {
-	if (   VARREF_IS_WRITE(aUsage)
-		&& (aUsage == VARREF_REF
-			? aVar->Type() != VAR_NORMAL // Aliasing VAR_VIRTUAL is currently unsupported.
-			: aVar->IsReadOnly() && aUsage != VARREF_LVALUE_MAYBE)   )
+	if (VARREF_IS_WRITE(aUsage) && aVar->IsReadOnly() && aUsage != VARREF_LVALUE_MAYBE)
 		return VarIsReadOnlyError(aVar, aUsage);
 	return OK;
 }
 
+__declspec(noinline)
 ResultType Script::VarIsReadOnlyError(Var *aVar, int aErrorType)
 {
 	TCHAR buf[127];

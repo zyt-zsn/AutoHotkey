@@ -808,7 +808,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					goto push_this_token;
 				}
 			}
-			ASSERT(right.var->Type() == VAR_NORMAL || right.var->Type() == VAR_VIRTUAL_OBJ);
+			ASSERT(right.var->Type() == VAR_NORMAL || right.var->IsVirtual());
 			this_token.SetValue(right.var->GetRef());
 			if (!this_token.object)
 				goto outofmem;
