@@ -3337,9 +3337,7 @@ SymbolType TokenIsPureNumeric(ExprTokenType &aToken)
 	case SYM_FLOAT:
 		return aToken.symbol;
 	case SYM_VAR:
-		if (!aToken.var->IsUninitializedNormalVar()) // Caller doesn't want a warning, so avoid calling Contents().
-			return aToken.var->IsPureNumeric();
-		//else fall through:
+		return aToken.var->IsPureNumeric();
 	default:
 		return PURE_NOT_NUMERIC;
 	}
@@ -3356,8 +3354,6 @@ SymbolType TokenIsPureNumeric(ExprTokenType &aToken, SymbolType &aNumType)
 	case SYM_FLOAT:
 		return aNumType = aToken.symbol;
 	case SYM_VAR:
-		if (aToken.var->IsUninitializedNormalVar()) // Caller doesn't want a warning, so avoid calling Contents().
-			return aNumType = PURE_NOT_NUMERIC; // i.e. empty string is non-numeric.
 		if (aNumType = aToken.var->IsPureNumeric())
 			return aNumType; // This var contains a pure binary number.
 		// Otherwise, it might be a numeric string (i.e. impure).
