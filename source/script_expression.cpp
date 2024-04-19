@@ -135,11 +135,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					if (right_obj->Base() == Object::sVarRefPrototype)
 						temp_var = static_cast<VarRef *>(right_obj);
 					else
-					{
-						error_info = _T("String or VarRef");
-						error_value = &right;
-						goto type_mismatch;
-					}
+						temp_var = new (_alloca(sizeof(Var))) Var(right_obj);
 				}
 				else
 				{
