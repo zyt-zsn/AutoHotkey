@@ -204,6 +204,7 @@ void Var::UpdateVirtualObj(IObject *aTargetRef)
 	ASSERT(!IsObject());
 	mType = VAR_VIRTUAL_OBJ;
 	_SetObject(aTargetRef);
+	mAttrib &= ~VAR_ATTRIB_NOT_NUMERIC; // Let IsNumeric() evaluate the property.
 	aTargetRef->AddRef();
 }
 
