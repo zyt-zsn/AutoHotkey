@@ -5276,6 +5276,8 @@ ResultType Script::ParseOperands(LPTSTR aArgText, DerefList &aDeref, int *aPos, 
 							DerefType &d = *aDeref.Last();
 							if (d.type == DT_VAR && d.marker + d.length == op_begin)
 								op_begin = d.marker;
+							else if (op_begin > aArgText && IS_IDENTIFIER_CHAR(op_begin[-1])) // Something like x.y() => z.
+								return ScriptError(ERR_EXPR_SYNTAX, d.marker);
 						}
 						if (!ParseFatArrow(aArgText, aDeref, op_begin, close_paren, cp + 2, op_begin))
 							return FAIL;
