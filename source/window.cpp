@@ -1401,13 +1401,16 @@ ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPCTSTR aT
 		switch (this_criterion)
 		{
 		case CRITERION_ID:
-			mCriterionHwnd = (HWND)ATOU64(start);
+			HWND hwnd;
+			hwnd = (HWND)ATOU64(start);
 			// Note that this can validly be the HWND of a child window; i.e. ahk_id %ChildWindowHwnd% is supported.
-			if (mCriterionHwnd != HWND_BROADCAST && !IsWindow(mCriterionHwnd)) // Checked here once rather than each call to IsMatch().
+			if (hwnd != HWND_BROADCAST && !IsWindow(hwnd) // Checked here once rather than each call to IsMatch().
+				|| (mCriteria & CRITERION_ID) && hwnd != mCriterionHwnd) // Two different IDs have been specified, so there can never be a match.
 			{
 				mCriterionHwnd = NULL;
 				return FAIL; // Inform caller of invalid criteria.  No need to do anything else further below.
 			}
+			mCriterionHwnd = hwnd;
 			break;
 		case CRITERION_PID:
 			mCriterionPID = ATOU(start);
