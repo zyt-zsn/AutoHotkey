@@ -1833,10 +1833,13 @@ ResultType Hotkey::TextToKey(LPCTSTR aText, bool aIsModifier, Hotkey *aThisHotke
 	else
 	{
 		// If there's something after the first word/character, it's not a hotkey.
-		if (aSyntaxCheckOnly)
-			return *keyname_end ? FAIL : OK;
+		// Only for *keyname_end != '\0', no error should be reported if aThisHotkey == NULL
+		// since the caller will attempt to parse the line as something else first, such as
+		// x := '::'
 		if (*keyname_end)
-			return ValueError(ERR_INVALID_HOTKEY, aText, FAIL);
+			return aThisHotkey ? ValueError(ERR_INVALID_HOTKEY, aText, FAIL) : CONDITION_FALSE;
+		if (aSyntaxCheckOnly)
+			return OK;
 	}
 
 	HotkeyTypeType hotkey_type_temp;

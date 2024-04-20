@@ -2820,7 +2820,7 @@ bool Script::IsSOLContExpr(LineBuffer &next_buf)
 		//  MsgBox
 		//  +!'::'  ; 0
 		*hotkey_flag = '\0';
-		bool valid_hotkey = Hotkey::TextInterpret(next_buf, NULL, true);
+		bool valid_hotkey = Hotkey::TextInterpret(next_buf, NULL, true) == OK;
 		*hotkey_flag = *HOTKEY_FLAG;
 		if (!valid_hotkey)
 			return true; // It's not valid hotkey syntax, so treat it as continuation even if it's ultimately a syntax error.
