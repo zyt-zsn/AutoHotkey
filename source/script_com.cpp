@@ -1315,6 +1315,7 @@ ObjectMemberMd ComObject::sArrayMembers[]
 ObjectMember ComObject::sRefMembers[]
 {
 	Object_Property_get_set(__Item),
+	Object_Property_get_set(__Value),
 };
 
 ObjectMember ComObject::sValueMembers[]
