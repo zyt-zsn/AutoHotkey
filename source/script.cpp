@@ -9369,6 +9369,18 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 			postfix_symbol = postfix[postfix_count - 1]->symbol;
 			if (postfix_symbol == SYM_VAR || postfix_symbol == SYM_DYNAMIC)
 				postfix[postfix_count - 1]->var_usage = VARREF_REF;
+			else if (postfix_symbol == SYM_FUNC
+				&& (postfix[postfix_count - 1]->callsite->flags & IT_BITMASK) == IT_GET
+				&&  postfix[postfix_count - 1]->callsite->param_count == 0) // &x.y
+			{
+				// Change { x, get y } to { x, 'y', call __Ref }
+				auto callsite = postfix[postfix_count - 1]->callsite;
+				this_postfix->SetValue(callsite->member ? callsite->member : _T("__Item"));
+				callsite->flags = IT_CALL;
+				callsite->member = _T("__Ref");
+				callsite->param_count = 1;
+				swap(this_postfix, postfix[postfix_count - 1]);
+			}
 			else if (!IS_OPERATOR_VALID_LVALUE(postfix_symbol))
 				return LineError(_T("\"&\" requires a variable."));
 			break;
