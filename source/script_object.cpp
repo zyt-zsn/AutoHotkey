@@ -3485,7 +3485,6 @@ ObjectMember Object::sOSErrorMembers[]
 
 ObjectMember VarRef::sMembers[]
 {
-	Object_Member(__Value, __Value, 0, IT_GET),
 	Object_Member(__Value, __Value, 0, IT_SET)
 };
 
