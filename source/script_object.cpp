@@ -568,6 +568,7 @@ void Map::Clear()
 
 ObjectMember Object::sMembers[] =
 {
+	Object_Method1(__Ref, 1, 1),
 	Object_Method1(Clone, 0, 0),
 	Object_Method1(DefineProp, 2, 2),
 	Object_Method1(DeleteProp, 1, 1),
@@ -1832,6 +1833,28 @@ void Object::GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags, Expr
 		desc->SetOwnProp(_T("Value"), value);
 	}
 	_o_return(desc);
+}
+
+void Object::__Ref(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	auto name = ParamIndexToString(0, _f_retval_buf);
+
+	for (Object *that = this; that; that = that->mBase)
+	{
+		if (auto field = that->FindField(name))
+		{
+			if (field->symbol != SYM_TYPED_FIELD || !field->tprop->class_object)
+				break;
+			Object *nested = mNested[field->tprop->object_index];
+			if (!nested)
+				break;
+			if (nested->AddRef() == 1) // Nested objects have this unique requirement.
+				this->AddRef();
+			_o_return(nested);
+		}
+	}
+
+	_o_return_unset;
 }
 
 
