@@ -1854,7 +1854,17 @@ void Object::__Ref(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType
 		}
 	}
 
-	_o_return_unset;
+	auto new_name = _tcsdup(name);
+	if (!new_name)
+		_o_throw_oom;
+	AddRef();
+	_o_return(new PropRef(this, new_name));
+}
+
+void PropRef::__Value(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if (mThat->Invoke(aResultToken, aFlags, mMember, ExprTokenType(mThat), aParam, aParamCount) == INVOKE_NOT_HANDLED)
+		_o_return_unset;
 }
 
 
@@ -3488,6 +3498,11 @@ ObjectMember VarRef::sMembers[]
 	Object_Member(__Value, __Value, 0, IT_SET)
 };
 
+ObjectMember PropRef::sMembers[]
+{
+	Object_Member(__Value, __Value, 0, IT_SET)
+};
+
 
 
 struct ClassDef
@@ -3618,6 +3633,9 @@ void Object::CreateRootPrototypes()
 		{_T("VarRef"), &sVarRefPrototype, no_ctor, VarRef::sMembers, _countof(VarRef::sMembers)}
 	});
 
+	// A global variable is intentionally not emitted for this yet:
+	PropRef::sPrototype = CreatePrototype(_T("PropRef"), sAnyPrototype, PropRef::sMembers, _countof(PropRef::sMembers));
+
 	GuiControlType::DefineControlClasses();
 	DefineComPrototypeMembers();
 	DefineFileClass();
@@ -3658,6 +3676,7 @@ namespace ErrorPrototype
 }
 
 Object *Object::sVarRefPrototype;
+Object *PropRef::sPrototype;
 Object *Object::sComObjectPrototype, *Object::sComValuePrototype, *Object::sComArrayPrototype, *Object::sComRefPrototype;
 
 IObject *Object::sObjectCall;

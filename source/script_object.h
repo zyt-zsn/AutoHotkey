@@ -582,6 +582,31 @@ public:
 };
 
 
+// This has some overlap with BoundFunc, but is separate since we don't want the extra Func members.
+class PropRef : public ObjectBase
+{
+	IObject *mThat;
+	LPTSTR mMember;
+
+public:
+	static Object *sPrototype;
+	static ObjectMember sMembers[];
+
+	PropRef(IObject *that, LPTSTR member) : mThat(that), mMember(member) {}
+
+	~PropRef()
+	{
+		mThat->Release();
+		free(mMember);
+	}
+
+	IObject_Type_Impl("PropRef");
+	Object *Base() { return sPrototype; }
+
+	void __Value(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+};
+
+
 //
 // Array
 //
