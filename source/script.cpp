@@ -9376,7 +9376,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				// Change { x, get y } to { x, 'y', call __Ref }
 				auto callsite = postfix[postfix_count - 1]->callsite;
 				this_postfix->SetValue(callsite->member ? callsite->member : _T("__Item"));
-				callsite->flags = IT_CALL;
+				callsite->flags = IT_CALL | IF_BYPASS_METAFUNC;
 				callsite->member = _T("__Ref");
 				callsite->param_count = 1;
 				swap(this_postfix, postfix[postfix_count - 1]);
