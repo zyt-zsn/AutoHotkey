@@ -964,3 +964,5 @@ BIF_DECL(Class_CallNestedClass);
 BIF_DECL(Class_New);
 
 BIF_DECL(Any___Init);
+
+BIF_DECL(PropRef_Call);

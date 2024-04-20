@@ -1835,9 +1835,20 @@ void Object::GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags, Expr
 	_o_return(desc);
 }
 
+void NewPropRef(ResultToken &aResultToken, IObject *aObj, LPCTSTR aName)
+{
+	auto new_name = _tcsdup(aName);
+	if (!new_name)
+		_f_throw_oom;
+	aObj->AddRef();
+	_f_return(new PropRef(aObj, new_name));
+}
+
 void Object::__Ref(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	auto name = ParamIndexToString(0, _f_retval_buf);
+	if (!*name)
+		_f_throw_param(0);
 
 	for (Object *that = this; that; that = that->mBase)
 	{
@@ -1854,11 +1865,19 @@ void Object::__Ref(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType
 		}
 	}
 
-	auto new_name = _tcsdup(name);
-	if (!new_name)
-		_o_throw_oom;
-	AddRef();
-	_o_return(new PropRef(this, new_name));
+	NewPropRef(aResultToken, this, name);
+}
+
+BIF_DECL(PropRef_Call)
+{
+	++aParam, --aParamCount; // Exclude "PropRef" itself.
+	auto that = ParamIndexToObject(0);
+	if (!that)
+		_f_throw_param(0, _T("object"));
+	auto name = ParamIndexToString(1, _f_retval_buf);
+	if (!*name)
+		_f_throw_param(1);
+	NewPropRef(aResultToken, that, name);
 }
 
 void PropRef::__Value(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -3630,11 +3649,9 @@ void Object::CreateRootPrototypes()
 			}},
 			{_T("String"), &Object::sStringPrototype, {BIF_String, 2, 2}}
 		}},
+		{_T("PropRef"), &PropRef::sPrototype, {PropRef_Call, 3, 3}, PropRef::sMembers, _countof(PropRef::sMembers)},
 		{_T("VarRef"), &sVarRefPrototype, no_ctor, VarRef::sMembers, _countof(VarRef::sMembers)}
 	});
-
-	// A global variable is intentionally not emitted for this yet:
-	PropRef::sPrototype = CreatePrototype(_T("PropRef"), sAnyPrototype, PropRef::sMembers, _countof(PropRef::sMembers));
 
 	GuiControlType::DefineControlClasses();
 	DefineComPrototypeMembers();
