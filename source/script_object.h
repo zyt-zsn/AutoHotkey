@@ -293,6 +293,7 @@ protected:
 		// key_c contains the first character of key.s. This utilizes space that would
 		// otherwise be unused due to 8-byte alignment. See FindField() for explanation.
 		TCHAR key_c;
+		bool enumerable;
 
 		Variant() = delete;
 		~Variant() { Free(); }
@@ -333,6 +334,8 @@ protected:
 	};
 
 	ResultType GetEnumProp(UINT &aIndex, Var *aName, Var *aVal, int aVarCount);
+
+	class PropEnum;
 
 #ifndef _WIN64
 	// This is defined in ObjectBase on x64 builds to save space (due to alignment requirements).
@@ -474,12 +477,13 @@ public:
 		return field && field->symbol == SYM_DYNAMIC ? field->prop->Getter() : nullptr;
 	}
 
-	bool SetOwnProp(name_t aName, ExprTokenType &aValue)
+	bool SetOwnProp(name_t aName, ExprTokenType &aValue, bool aEnumerable = true)
 	{
 		index_t insert_pos;
 		auto field = FindField(aName, insert_pos);
 		if (!field && !(field = Insert(aName, insert_pos)))
 			return false;
+		field->enumerable = aEnumerable;
 		return field->Assign(aValue);
 	}
 
@@ -494,7 +498,7 @@ public:
 			mFields.Remove((index_t)(field - mFields), 1);
 	}
 	
-	Property *DefineProperty(name_t aName);
+	Property *DefineProperty(name_t aName, bool aEnumerable = true);
 	TypedProperty *DefineTypedProperty(name_t aName);
 	FResult DefineTypedProperty(name_t aName, MdType aType, Object *aClass, size_t aCount);
 	bool DefineMethod(name_t aName, IObject *aFunc);
@@ -569,6 +573,7 @@ public:
 	void GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	void HasOwnProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	void OwnProps(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void Props(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	void Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	void __Ref(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 

@@ -574,7 +574,8 @@ ObjectMember Object::sMembers[] =
 	Object_Method1(DeleteProp, 1, 1),
 	Object_Method1(GetOwnPropDesc, 1, 1),
 	Object_Method1(HasOwnProp, 1, 1),
-	Object_Method1(OwnProps, 0, 0)
+	Object_Method1(OwnProps, 0, 0),
+	Object_Method1(Props, 0, 0)
 };
 
 LPTSTR Object::sMetaFuncName[] = { _T("__Get"), _T("__Set"), _T("__Call") };
@@ -1226,7 +1227,7 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase)
 {
 	auto obj = new Object();
 	obj->mFlags |= ClassPrototype;
-	obj->SetOwnProp(_T("__Class"), ExprTokenType(aClassName));
+	obj->SetOwnProp(_T("__Class"), ExprTokenType(aClassName), false);
 	obj->SetBase(aBase);
 	return obj;
 }
@@ -1531,6 +1532,11 @@ void Object::OwnProps(ResultToken &aResultToken, int aID, int aFlags, ExprTokenT
 		, static_cast<IndexEnumerator::Callback>(&Object::GetEnumProp)));
 }
 
+void Object::Props(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	_o_return(new PropEnum(this));
+}
+
 void Map::__Enum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	_o_return(new IndexEnumerator(this, ParamIndexToOptionalInt(0, 0)
@@ -1579,12 +1585,13 @@ bool Object::DefineMethod(name_t aName, IObject *aFunc)
 	return false;
 }
 
-Property *Object::DefineProperty(name_t aName)
+Property *Object::DefineProperty(name_t aName, bool aEnumerable)
 {
 	index_t insert_pos;
 	auto field = FindField(aName, insert_pos);
 	if (!field && !(field = Insert(aName, insert_pos)))
 		return nullptr;
+	field->enumerable = aEnumerable;
 	if (field->symbol != SYM_DYNAMIC)
 	{
 		field->Free();
@@ -2710,8 +2717,8 @@ ResultType Object::GetEnumProp(UINT &aIndex, Var *aName, Var *aVal, int aVarCoun
 			}
 			else if (field.symbol == SYM_TYPED_FIELD)
 			{
-				// TODO: enumerate typed properties based on fields in base?
-				aVal->Free(VAR_NEVER_FREE | VAR_REQUIRE_INIT);
+				// Typed properties are owned by the prototype, but have values only in the instances.
+				continue;
 			}
 			else
 			{
@@ -2727,6 +2734,89 @@ ResultType Object::GetEnumProp(UINT &aIndex, Var *aName, Var *aVal, int aVarCoun
 		return CONDITION_TRUE;
 	}
 	return CONDITION_FALSE;
+}
+
+
+Object::PropEnum::PropEnum(Object *aObject)
+{
+	for (Object *p = aObject; p; p = p->mBase)
+		++mIndexCount;
+	mIndex = new index_t[mIndexCount];
+	memset(mIndex, 0, mIndexCount * sizeof(index_t));
+	mObject = aObject;
+	mObject->AddRef();
+}
+
+
+Object::PropEnum::~PropEnum()
+{
+	mObject->Release();
+	delete[] mIndex;
+}
+
+
+ResultType Object::PropEnum::Next(Var *aName, Var *aVal)
+{
+	int nextidx, testidx = 0;
+	Object *nextobj = nullptr;
+	bool is_proto = mObject->IsClassPrototype();
+	for (Object *testobj = mObject;; )
+	{
+		if (mIndex[testidx] < testobj->mFields.Length())
+		{
+			auto &testfld = testobj->mFields[mIndex[testidx]];
+			if (!testfld.enumerable
+				|| testfld.symbol == SYM_DYNAMIC && (testfld.prop->NoEnumGet || !testfld.prop->Getter() || is_proto))
+			{
+				++mIndex[testidx]; // Skip this property.
+				continue;
+			}
+			int r = nextobj ? _tcsicmp(testfld.name, nextobj->mFields[mIndex[nextidx]].name) : -1;
+			if (r < 0)
+			{
+				nextidx = testidx;
+				nextobj = testobj;
+			}
+			else if (r == 0)
+			{
+				++mIndex[testidx]; // Skip this shadowed property.
+				// No need to consider the name at the new index, since r > 0 can be inferred.
+			}
+		}
+		++testidx, testobj = testobj->mBase;
+		if (!testobj || testidx >= mIndexCount)
+			break; // No more bases.
+	}
+	if (!nextobj)
+		return CONDITION_FALSE;
+
+	UINT tempidx = mIndex[nextidx];
+
+	auto &field = nextobj->mFields[mIndex[nextidx]++];
+
+	ResultType result = OK;
+	if (aName)
+		result = aName->Assign(field.name);
+
+	if (aVal && result)
+	{
+		FuncResult result_token;
+		auto result = mObject->GetFieldValue(result_token, IT_GET | IF_BYPASS___VALUE, field, ExprTokenType(mObject));
+		if (result == FAIL || result == EARLY_EXIT)
+			return result;
+		if (result_token.mem_to_free)
+		{
+			ASSERT(result_token.symbol == SYM_STRING && result_token.mem_to_free == result_token.marker);
+			aVal->AcceptNewMem(result_token.mem_to_free, result_token.marker_length);
+		}
+		else
+		{
+			result = aVal->Assign(result_token);
+			result_token.Free();
+		}
+	}
+	
+	return result ? CONDITION_TRUE : FAIL;
 }
 
 
@@ -3009,6 +3099,7 @@ Object::FieldType *Object::Insert(name_t name, index_t at)
 	field.key_c = ctolower(*name);
 	field.name = name; // Above has already copied string or called key.p->AddRef() as appropriate.
 	field.Minit(); // Initialize to default value.  Caller will likely reassign.
+	field.enumerable = true;
 	return &field;
 }
 
@@ -3524,12 +3615,12 @@ ObjectMember Object::sOSErrorMembers[]
 
 ObjectMember VarRef::sMembers[]
 {
-	Object_Member(__Value, __Value, 0, IT_SET)
+	Object_Member(__Value, __Value, 0, IT_SET | BIMF_UNSET_ARG_1)
 };
 
 ObjectMember PropRef::sMembers[]
 {
-	Object_Member(__Value, __Value, 0, IT_SET)
+	Object_Member(__Value, __Value, 0, IT_SET | BIMF_UNSET_ARG_1)
 };
 
 
@@ -3572,7 +3663,7 @@ void Object::CreateRootPrototypes()
 	static const LPTSTR sFuncs[] = { _T("GetMethod"), _T("HasBase"), _T("HasMethod"), _T("HasProp") };
 	for (int i = 0; i < _countof(sFuncs); ++i)
 		sAnyPrototype->DefineMethod(sFuncs[i], g_script.FindGlobalFunc(sFuncs[i]));
-	auto prop = sAnyPrototype->DefineProperty(_T("Base"));
+	auto prop = sAnyPrototype->DefineProperty(_T("Base"), false);
 	prop->NoParamGet = prop->NoParamSet = true;
 	prop->SetGetter(g_script.FindGlobalFunc(_T("ObjGetBase")));
 	prop->SetSetter(g_script.FindGlobalFunc(_T("ObjSetBase")));

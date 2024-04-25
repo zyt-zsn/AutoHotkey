@@ -1856,6 +1856,19 @@ public:
 };
 
 
+class Object::PropEnum : public EnumBase
+{
+	Object *mObject;
+	index_t *mIndex;
+	int mIndexCount = 0;
+
+public:
+	PropEnum(Object *aObject);
+	~PropEnum();
+	ResultType Next(Var *aName, Var *aVal) override;
+};
+
+
 
 class ScriptTimer
 {

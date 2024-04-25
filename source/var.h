@@ -904,9 +904,16 @@ public:
 		var.mAttrib |= VAR_ATTRIB_UNINITIALIZED;
 	}
 
-	void Uninitialize(int aWhenToFree = VAR_FREE_IF_LARGE) 
+	ResultType Uninitialize(int aWhenToFree = VAR_FREE_IF_LARGE) 
 	{
+		if (IsVirtual())
+		{
+			ExprTokenType unset;
+			unset.symbol = SYM_MISSING;
+			return AssignVirtual(unset);
+		}
 		Free(aWhenToFree | VAR_REQUIRE_INIT);
+		return OK;
 	}
 
 }; // class Var
