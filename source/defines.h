@@ -325,6 +325,7 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 #define IF_SUPER			0x000040 // super.something invocation.
 #define IF_NO_NEW_PROPS		0x000080 // Don't permit new properties.
 #define IF_NEWENUM			0x000200 // Workaround for COM objects which don't resolve "_NewEnum" to DISPID_NEWENUM.
+#define IF_BYPASS___VALUE	0x000400
 
 #define EIF_VARIADIC		0x010000
 #define EIF_STACK_MEMBER	0x020000
