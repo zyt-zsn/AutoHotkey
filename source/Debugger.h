@@ -423,7 +423,7 @@ private:
 	int ReceiveCommand(int *aCommandSize=NULL);
 
 	// Send XML response to debugger UI:
-	int SendResponse();
+	int SendResponse(size_t aStartOffset = 0);
 	int SendErrorResponse(char *aCommandName, char *aTransactionId, int aError=999, char *aExtraAttributes=NULL);
 	int SendStandardResponse(char *aCommandName, char *aTransactionId);
 	int SendContinuationResponse(LPCSTR aCommand = nullptr, LPCSTR aStatus = "break", LPCSTR aReason = "ok");

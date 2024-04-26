@@ -2168,11 +2168,16 @@ DEBUGGER_COMMAND(Debugger::redirect_stderr)
 int Debugger::WriteStreamPacket(LPCTSTR aText, LPCSTR aType)
 {
 	ASSERT(!mResponseBuf.mFailed);
+	// Although it is contrary to the DBGP spec, allowing stream packets to be sent while the debugger
+	// is in a break state (but executing due to a property getter invoked by property_get or context_get)
+	// is useful for debugging and therefore allowed.  We just have to be sure to preserve any partial
+	// response already present in the buffer:
+	size_t offset = mResponseBuf.mDataUsed;
 	mResponseBuf.WriteF("<stream type=\"%s\">", aType);
 	CStringUTF8FromTChar packet(aText);
 	mResponseBuf.WriteEncodeBase64(packet, packet.GetLength() + 1); // Includes the null-terminator.
 	mResponseBuf.Write("</stream>");
-	return SendResponse();
+	return SendResponse(offset);
 }
 
 bool Debugger::OutputStdErr(LPCTSTR aText)
@@ -2276,14 +2281,22 @@ int Debugger::ReceiveCommand(int *aCommandLength)
 //
 // Sends a response to a command, using mResponseBuf.mData as the message body.
 //
-int Debugger::SendResponse()
+int Debugger::SendResponse(size_t aStartOffset)
 {
 	ASSERT(!mResponseBuf.mFailed);
+	ASSERT(aStartOffset < mResponseBuf.mDataUsed);
+	ASSERT(mResponseBuf.mDataUsed <= mResponseBuf.mDataSize);
 
 	char response_header[DEBUGGER_RESPONSE_OVERHEAD];
+
+	size_t data_length = mResponseBuf.mDataUsed - aStartOffset;
+	
+	// Messages sent by the debugger engine must always be NULL terminated.
+	// ExpandIfNecessary() reserved 1 byte for this (excluded from mDataSize):
+	mResponseBuf.mData[mResponseBuf.mDataUsed] = '\0';
 	
 	// Each message is prepended with a stringified integer representing the length of the XML data packet.
-	Exp32or64(_itoa,_i64toa)(mResponseBuf.mDataUsed + DEBUGGER_XML_TAG_SIZE, response_header, 10);
+	Exp32or64(_itoa,_i64toa)(data_length + DEBUGGER_XML_TAG_SIZE, response_header, 10);
 
 	// The length and XML data are separated by a NULL byte.
 	char *buf = strchr(response_header, '\0') + 1;
@@ -2293,18 +2306,14 @@ int Debugger::SendResponse()
 
 	// Send the response header.
 	if (  SOCKET_ERROR == send(mSocket, response_header, (int)(buf - response_header), 0)
-	   // Messages sent by the debugger engine must always be NULL terminated.
-	   // Failure to write the last byte should be extremely rare, so no attempt
-	   // is made to recover from that condition.
-	   || DEBUGGER_E_OK != mResponseBuf.Write("\0", 1)
 	   // Send the message body.
-	   || SOCKET_ERROR == send(mSocket, mResponseBuf.mData, (int)mResponseBuf.mDataUsed, 0)  )
+	   || SOCKET_ERROR == send(mSocket, mResponseBuf.mData + aStartOffset, (int)(data_length + 1), 0)  )
 	{
 		// Unrecoverable error: disconnect the debugger.
 		return FatalError();
 	}
 
-	mResponseBuf.Clear();
+	mResponseBuf.mDataUsed = aStartOffset;
 	return DEBUGGER_E_OK;
 }
 
@@ -2772,7 +2781,7 @@ void Debugger::DecodeURI(char *aUri)
 // Initialize or expand the buffer, don't care how much.
 int Debugger::Buffer::Expand()
 {
-	return ExpandIfNecessary(mDataSize ? mDataSize * 2 : DEBUGGER_INITIAL_BUFFER_SIZE);
+	return ExpandIfNecessary(mDataSize + 1);
 }
 
 // Expand as necessary to meet a minimum required size.
@@ -2782,11 +2791,11 @@ int Debugger::Buffer::ExpandIfNecessary(size_t aRequiredSize)
 		return DEBUGGER_E_INTERNAL_ERROR;
 
 	size_t new_size;
-	for (new_size = mDataSize ? mDataSize : DEBUGGER_INITIAL_BUFFER_SIZE
-		; new_size < aRequiredSize
+	for (new_size = mDataSize ? mDataSize + 1 : DEBUGGER_INITIAL_BUFFER_SIZE
+		; new_size <= aRequiredSize
 		; new_size *= 2);
 
-	if (new_size > mDataSize)
+	if (new_size > mDataSize + 1)
 	{
 		// For simplicity, this preserves all of mData not just the first mDataUsed bytes.  Some sections may rely on this.
 		char *new_data = (char*)realloc(mData, new_size);
@@ -2798,7 +2807,7 @@ int Debugger::Buffer::ExpandIfNecessary(size_t aRequiredSize)
 		}
 
 		mData = new_data;
-		mDataSize = new_size;
+		mDataSize = new_size - 1; // Reserve 1 byte for null-termination.
 	}
 	return DEBUGGER_E_OK;
 }
