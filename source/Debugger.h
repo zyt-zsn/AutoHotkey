@@ -273,12 +273,7 @@ public:
 	DEBUGGER_COMMAND(redirect_stderr);
 
 
-	Debugger() : mSocket(INVALID_SOCKET), mInternalState(DIS_Starting)
-		, mMaxPropertyData(1024), mContinuationTransactionId(""), mStdErrMode(SR_Disabled), mStdOutMode(SR_Disabled)
-		, mMaxChildren(20), mMaxDepth(2), mDisabledHooks(0)
-		, mThrownToken(NULL), mBreakOnExceptionID(0), mBreakOnExceptionWasSet(false), mBreakOnExceptionIsTemporary(false), mBreakOnException(false)
-	{
-	}
+	Debugger() {}
 
 	
 	// Stack - keeps track of threads and function calls.
@@ -286,11 +281,11 @@ public:
 	friend struct DbgStack;
 
 private:
-	SOCKET mSocket;
-	Line *mCurrLine; // Similar to g_script.mCurrLine, but may be different when breaking post-function-call, before continuing expression evaluation.
-	ExprTokenType *mThrownToken; // The exception that triggered the current exception breakpoint.
-	bool mBreakOnExceptionWasSet, mBreakOnExceptionIsTemporary, mBreakOnException; // Supports a single coverall breakpoint exception.
-	int mBreakOnExceptionID;
+	SOCKET mSocket = INVALID_SOCKET;
+	Line *mCurrLine = nullptr; // Similar to g_script.mCurrLine, but may be different when breaking post-function-call, before continuing expression evaluation.
+	ExprTokenType *mThrownToken = nullptr; // The exception that triggered the current exception breakpoint.
+	bool mBreakOnExceptionWasSet = false, mBreakOnExceptionIsTemporary = false, mBreakOnException = false; // Supports a single coverall breakpoint exception.
+	int mBreakOnExceptionID = 0;
 
 	class Buffer
 	{
@@ -327,20 +322,20 @@ private:
 		DIS_StepInto,
 		DIS_StepOver,
 		DIS_StepOut
-	} mInternalState;
+	} mInternalState = DIS_Starting;
 
 	enum StreamRedirectType {
 		SR_Disabled = 0,
 		SR_Copy = 1,
 		SR_Redirect = 2
-	} mStdErrMode, mStdOutMode;
+	} mStdErrMode = SR_Disabled, mStdOutMode = SR_Disabled;
 
-	int mContinuationDepth; // Stack depth at last continuation command, for step_into/step_over.
-	CStringA mContinuationTransactionId; // transaction_id of last continuation command.
+	int mContinuationDepth = 0; // Stack depth at last continuation command, for step_into/step_over.
+	CStringA mContinuationTransactionId {""}; // transaction_id of last continuation command.
 
-	int mMaxPropertyData, mMaxChildren, mMaxDepth;
+	int mMaxPropertyData = 1024, mMaxChildren = 20, mMaxDepth = 2;
 
-	HookType mDisabledHooks;
+	HookType mDisabledHooks = 0;
 
 
 	enum PropertyType
