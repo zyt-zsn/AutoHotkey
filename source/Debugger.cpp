@@ -1521,6 +1521,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 				return DEBUGGER_E_OK;
 			}
 			iobj = TokenToObject(*mThrownToken);
+			iobj->AddRef();
 		}
 		else
 			return DEBUGGER_E_INVALID_OPTIONS;
