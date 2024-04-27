@@ -1486,7 +1486,6 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 	TCHAR c, *name_end, *src, *dst;
 	Var *var = NULL;
 	VarBkp *varbkp = NULL;
-	SymbolType key_type;
 	IObject *iobj = NULL;
 
 	aResult.kind = PropNone;
@@ -1601,7 +1600,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 		return DEBUGGER_E_UNKNOWN_PROPERTY;
 
 	int return_value = DEBUGGER_E_UNKNOWN_PROPERTY;
-	Object *obj, *this_override = nullptr;
+	IObject *this_override = nullptr;
 
 	// aFullName contains a '.' or '['.  Although it looks like an expression, the IDE should
 	// only pass a property name which we gave it in response to a previous command, so we
@@ -1609,15 +1608,35 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 	for (;;)
 	{
 		*name_end = c; // Undo termination (if it was terminated at this position).
-		name = name_end + 1;
-		const bool brackets = c == '[';
-		if (brackets)
+		if (c == '.')
 		{
-			if (*name == '"')
+			name = name_end + 1;
+			// For simplicity, let this be any string terminated by '.' or '['.
+			// Actual expressions require it to contain only alphanumeric chars and/or '_'.
+			name_end = StrChrAny(name, _T(".[")); // This also sets it up for the next iteration.
+			if (name_end)
+			{
+				c = *name_end; // Save this for the next iteration.
+				*name_end = '\0';
+			}
+			else
+				c = 0; // Indicate there won't be a next iteration.
+		}
+		else
+			name = nullptr; // __Item[] or invalid.
+
+		ExprTokenType t_key;
+		t_key.symbol = SYM_MISSING;
+		if (c == '[' && !(name && *name == '<')) // <base> and <enum> aren't actual properties, so don't accept parameters.
+		{
+			src = name_end + 1;
+			if (*src == '"')
 			{
 				// Quoted string which may contain any character.
+				t_key.symbol = SYM_STRING;
+				t_key.marker = ++src;
 				// Replace "" with " in-place and find end of string:
-				for (dst = src = ++name; c = *src; ++src)
+				for (dst = src; c = *src; ++src)
 				{
 					if (c == '"')
 					{
@@ -1634,15 +1653,16 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 					return_value = DEBUGGER_E_INVALID_OPTIONS;
 					break;
 				}
+				t_key.marker_length = dst - t_key.marker;
 				*dst = '\0'; // Only after the check above, since src might be == dst.
 				name_end = src + 1; // Set it up for the next iteration.
-				key_type = SYM_STRING;
 			}
-			else if (!_tcsnicmp(name, _T("Object("), 7))
+			else if (!_tcsnicmp(src, _T("Object("), 7))
 			{
 				// Object(n) where n is the address of a key object, as a literal signed integer.
-				name += 7;
-				name_end = _tcschr(name, ')');
+				t_key.symbol = SYM_OBJECT;
+				src += 7;
+				name_end = _tcschr(src, ')');
 				if (!name_end || name_end[1] != ']')
 				{
 					return_value = DEBUGGER_E_INVALID_OPTIONS;
@@ -1650,12 +1670,12 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 				}
 				*name_end = '\0';
 				name_end += 2; // Set it up for the next iteration.
-				key_type = SYM_OBJECT;
 			}
 			else
 			{
 				// The only other valid form is a literal signed integer.
-				name_end = _tcschr(name, ']');
+				t_key.symbol = SYM_INTEGER;
+				name_end = _tcschr(src, ']');
 				if (!name_end)
 				{
 					return_value = DEBUGGER_E_INVALID_OPTIONS;
@@ -1663,24 +1683,12 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 				}
 				*name_end = '\0'; // Although not actually necessary for _ttoi(), seems best for maintainability.
 				++name_end; // Set it up for the next iteration.
-				key_type = SYM_INTEGER;
 			}
+			if (t_key.symbol != SYM_STRING) // SYM_INTEGER or SYM_OBJECT
+				t_key.value_int64 = istrtoi64(src, nullptr);
 			c = *name_end; // Set for the next iteration.
 		}
-		else if (c == '.')
-		{
-			// For simplicity, let this be any string terminated by '.' or '['.
-			// Actual expressions require it to contain only alphanumeric chars and/or '_'.
-			name_end = StrChrAny(name, _T(".[")); // This also sets it up for the next iteration.
-			if (name_end)
-			{
-				c = *name_end; // Save this for the next iteration.
-				*name_end = '\0';
-			}
-			else
-				c = 0; // Indicate there won't be a next iteration.
-		}
-		else
+		else if (!name)
 		{
 			return_value = DEBUGGER_E_INVALID_OPTIONS;
 			break;
@@ -1689,16 +1697,17 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 		// IDE should request .<base> only if it was returned by property_get or context_get,
 		// so this always means the object's base.  By contrast, .base might invoke some other
 		// property (if overridden) and ["base"] should invoke __item.
-		if (!_tcsicmp(name - 1, _T(".<base>")) && (obj = dynamic_cast<Object *>(iobj)))
+		if (name && !_tcsicmp(name, _T("<base>")))
 		{
-			if (!obj->mBase)
+			auto next_obj = iobj->Base();
+			if (!next_obj)
 				break;
-			iobj = obj->mBase;
-			iobj->AddRef(); // Keep next object alive.
+			next_obj->AddRef(); // Keep next object alive.
 			if (this_override) // Something like this_override.<base>.<base>.
-				obj->Release(); // Release previous base object.
+				iobj->Release(); // Release previous base object.
 			else
-				this_override = obj;
+				this_override = iobj;
+			iobj = next_obj;
 			if (c) continue; // Search the base object's fields.
 			// For property_set, this won't allow the base to be set (success="0").
 			// That seems okay since it could only ever be set to NULL anyway.
@@ -1707,7 +1716,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 			aResult.this_object = this_override;
 			return DEBUGGER_E_OK;
 		}
-		else if (!_tcsicmp(name - 1, _T(".<enum>")))
+		else if (name && !_tcsicmp(name, _T("<enum>")))
 		{
 			if (c) continue;
 			if (this_override)
@@ -1718,22 +1727,14 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 		}
 
 		// Attempt to invoke property.
-		ExprTokenType *set_this = !c ? aSetValue : NULL;
-		ExprTokenType t_this(this_override ? this_override : iobj), t_key, *param[2];
+		ExprTokenType *value_to_set = !c ? aSetValue : NULL;
+		ExprTokenType t_this(this_override ? this_override : iobj), *param[2];
 		int param_count = 0;
-		if (brackets)
-		{
-			t_key.symbol = key_type;
-			if (key_type == SYM_STRING)
-				t_key.marker = name, t_key.marker_length = -1;
-			else // SYM_INTEGER or SYM_OBJECT
-				t_key.value_int64 = istrtoi64(name, nullptr);
+		if (t_key.symbol != SYM_MISSING)
 			param[param_count++] = &t_key;
-			name = nullptr;
-		}
-		if (set_this)
-			param[param_count++] = set_this;
-		int flags = (set_this ? IT_SET : IT_GET);
+		if (value_to_set)
+			param[param_count++] = value_to_set;
+		int flags = (value_to_set ? IT_SET : IT_GET);
 		auto result = iobj->Invoke(aResult.value, flags, name, t_this, param, param_count);
 		if (g->ThrownToken)
 			g_script.FreeExceptionToken(g->ThrownToken);
@@ -1756,7 +1757,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 		}
 		if (!c)
 		{
-			if (!set_this)
+			if (!value_to_set)
 				aResult.kind = PropValue;
 			return_value = DEBUGGER_E_OK;
 			break;
