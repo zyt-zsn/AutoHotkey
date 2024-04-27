@@ -143,7 +143,11 @@ ResultType Line::SetThrownToken(global_struct &g, ResultToken *aToken, ResultTyp
 {
 #ifdef CONFIG_DEBUGGER
 	if (g_Debugger.IsConnected())
-		if (g_Debugger.PreThrow(aToken) && !(g.ExcptMode & EXCPTMODE_CATCH))
+		if (g_Debugger.IsAtBreak() || g_Debugger.PreThrow(aToken) && !(g.ExcptMode & EXCPTMODE_CATCH))
+			// IsAtBreak() indicates the debugger was already in a break state, likely
+			// processing a property_get or context_get which caused script execution.
+			// In that case, silence all error dialogs and don't set g.ThrownToken since
+			// the debugger is lax about detecting/clearing it.  If PreThrow was called:
 			// The debugger has entered (and left) a break state, so the client has had a
 			// chance to inspect the exception and report it.  There's nothing in the DBGp
 			// spec about what to do next, probably since PHP would just log the error.
@@ -250,6 +254,11 @@ ResultType Script::RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, ResultTy
 	ASSERT(aErrorText);
 	if (!aExtraInfo)
 		aExtraInfo = _T("");
+
+#ifdef CONFIG_DEBUGGER
+	if (g_Debugger.IsAtBreak()) // i.e. the debugger is processing a property_get or context_get.
+		return FAIL; // Silent abort, no g->ThrownToken.
+#endif
 
 	if ((g->ExcptMode || mOnError.Count()
 #ifdef CONFIG_DEBUGGER
