@@ -1139,6 +1139,7 @@ int Debugger::GetPropertyInfo(VarBkp &aBkp, PropertyInfo &aProp)
 		return GetPropertyValue(*aBkp.mAliasFor, aProp);
 	}
 	aProp.is_builtin = false;
+	aProp.invokee = nullptr;
 	aBkp.ToToken(aProp.value);
 	return DEBUGGER_E_OK;
 }
@@ -1165,15 +1166,19 @@ int Debugger::GetPropertyValue(Var &aVar, PropertySource &aProp)
 		else
 			aVar.ToToken(aProp.value);
 	}
+	aProp.invokee = nullptr;
 	return DEBUGGER_E_OK;
 }
 
 
-int Debugger::WritePropertyXml(PropertyInfo &aProp, IObject *aObject)
+int Debugger::WritePropertyObjectXml(PropertyInfo &aProp)
 {
-	PropertyWriter pw(*this, aProp, aObject);
+	ASSERT(aProp.value.symbol == SYM_OBJECT || aProp.invokee);
+	if (!aProp.invokee)
+		aProp.invokee = aProp.value.object;
+	PropertyWriter pw(*this, aProp);
 	// Ask the object to write out its properties:
-	aObject->DebugWriteProperty(&pw, aProp.page, aProp.pagesize, aProp.max_depth);
+	aProp.invokee->DebugWriteProperty(&pw, aProp.page, aProp.pagesize, aProp.max_depth);
 	aProp.fullname.Truncate(pw.mNameLength);
 	// For simplicity/code size, instead of requiring error handling in aObject,
 	// any failure during the above sets pw.mError, which causes it to ignore
@@ -1244,11 +1249,11 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 	aDebugger->EndProperty(cookie);
 }
 
-int Debugger::WriteEnumItems(PropertyInfo &aProp, IObject *aEnumerable)
+int Debugger::WriteEnumItems(PropertyInfo &aProp)
 {
 	aProp.facet = "";
-	PropertyWriter pw(*this, aProp, nullptr);
-	pw.WriteEnumItems(aEnumerable, aProp.page, aProp.page + aProp.pagesize);
+	PropertyWriter pw(*this, aProp);
+	pw.WriteEnumItems(aProp.invokee, aProp.page, aProp.page + aProp.pagesize);
 	return pw.mError;
 }
 
@@ -1266,8 +1271,8 @@ void Debugger::PropertyWriter::WriteEnumItems(IObject *aEnumerable, int aStart, 
 	bool write_main_property = !mDepth;
 	if (write_main_property)
 	{
-		if (!mObject)
-			mObject = enumerator;
+		if (mProp.kind == PropEnum)
+			mProp.invokee = enumerator;
 		BeginProperty(nullptr, "object", 1, cookie);
 	}
 	
@@ -1310,16 +1315,16 @@ int Debugger::WritePropertyXml(PropertyInfo &aProp)
 		strcat(facetbuf, " Static");
 	aProp.facet = facetbuf + (*facetbuf != '\0'); // Skip the leading space, if non-empty.
 
+	ASSERT(aProp.kind != PropEnum);
+	if (aProp.value.symbol == SYM_OBJECT || aProp.invokee) // An object or `primitive.<base>`
+		return WritePropertyObjectXml(aProp);
+
 	char *type;
 	switch (aProp.value.symbol)
 	{
 	case SYM_STRING: type = "string"; break;
 	case SYM_INTEGER: type = "integer"; break;
 	case SYM_FLOAT: type = "float"; break;
-
-	case SYM_OBJECT:
-		// Recursively dump object.
-		return WritePropertyXml(aProp, aProp.value.object);
 
 	default:
 		// Catch SYM_VAR or any invalid symbol in debug mode.  In release mode, treat as undefined
@@ -1486,7 +1491,6 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 	TCHAR c, *name_end, *src, *dst;
 	Var *var = NULL;
 	VarBkp *varbkp = NULL;
-	IObject *iobj = NULL;
 
 	aResult.kind = PropNone;
 
@@ -1505,23 +1509,22 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 		{
 			if (!mThrownToken)
 				return DEBUGGER_E_UNKNOWN_PROPERTY;
+			aResult.kind = PropValue;
+			aResult.value.CopyValueFrom(*mThrownToken);
+			if (aResult.value.symbol == SYM_OBJECT)
+				aResult.value.object->AddRef();
 			if (!name_end)
 			{
 				// `property_get -n <exception>` is our non-standard way to retrieve the thrown value during an exception break.
 				// `property_set -n <exception> --` is our non-standard way to "clear the exception" (suppress the error dialog).
-				if (aSetValue && TokenIsEmptyString(*aSetValue))
+				if (aSetValue)
 				{
+					if (!TokenIsEmptyString(*aSetValue))
+						return DEBUGGER_E_INVALID_OPTIONS;
 					mThrownToken = nullptr;
-					return DEBUGGER_E_OK;
 				}
-				aResult.kind = PropValue;
-				aResult.value.CopyValueFrom(*mThrownToken);
-				if (aResult.value.symbol == SYM_OBJECT)
-					aResult.value.object->AddRef();
 				return DEBUGGER_E_OK;
 			}
-			iobj = TokenToObject(*mThrownToken);
-			iobj->AddRef();
 		}
 		else
 			return DEBUGGER_E_INVALID_OPTIONS;
@@ -1579,35 +1582,31 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 			auto error = GetPropertyValue(*var, aResult); // Supports built-in vars.
 			if (error)
 				return error;
-			if (aResult.value.symbol == SYM_OBJECT)
-				iobj = aResult.value.object; // Take ownership of this reference, which is overwitten below.
-			else
-				aResult.value.Free(); // Free mem_to_free if non-null.
-			// aResult.value must be reinitialized because Invoke expects it to have a default of "".
-			// For x.<base> and x.<enum>, it's expected to have a value that doesn't need Free() called.
-			aResult.value.InitResult(aResult.value.buf);
 		}
 		else
 		{
-			if (varbkp->mAttrib & VAR_ATTRIB_IS_OBJECT) 
-			{
-				iobj = varbkp->mObject;
-				iobj->AddRef();
-			}
+			varbkp->ToToken(aResult.value);
+			if (aResult.value.symbol == SYM_OBJECT)
+				aResult.value.object->AddRef();
 		}
 	}
 	
-	if (!iobj)
+	if (aResult.value.symbol == SYM_MISSING)
 		return DEBUGGER_E_UNKNOWN_PROPERTY;
 
-	int return_value = DEBUGGER_E_UNKNOWN_PROPERTY;
-	IObject *this_override = nullptr;
+	IObject *this_obj;
+	int invoke_flags;
 
 	// aFullName contains a '.' or '['.  Although it looks like an expression, the IDE should
 	// only pass a property name which we gave it in response to a previous command, so we
 	// only need to support the subset of expression syntax used by WriteObjectPropertyXml().
 	for (;;)
 	{
+		this_obj = aResult.value.symbol == SYM_OBJECT ? aResult.value.object : Object::ValueBase(aResult.value);
+		invoke_flags = aResult.value.symbol == SYM_OBJECT ? 0 : IF_SUBSTITUTE_THIS;
+		ASSERT(this_obj);
+
+	continue_same_this_obj:
 		*name_end = c; // Undo termination (if it was terminated at this position).
 		if (c == '.')
 		{
@@ -1650,10 +1649,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 					*dst++ = c;
 				}
 				if (*src != ']')
-				{
-					return_value = DEBUGGER_E_INVALID_OPTIONS;
-					break;
-				}
+					return DEBUGGER_E_INVALID_OPTIONS;
 				t_key.marker_length = dst - t_key.marker;
 				*dst = '\0'; // Only after the check above, since src might be == dst.
 				name_end = src + 1; // Set it up for the next iteration.
@@ -1665,10 +1661,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 				src += 7;
 				name_end = _tcschr(src, ')');
 				if (!name_end || name_end[1] != ']')
-				{
-					return_value = DEBUGGER_E_INVALID_OPTIONS;
-					break;
-				}
+					return DEBUGGER_E_INVALID_OPTIONS;
 				*name_end = '\0';
 				name_end += 2; // Set it up for the next iteration.
 			}
@@ -1678,10 +1671,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 				t_key.symbol = SYM_INTEGER;
 				name_end = _tcschr(src, ']');
 				if (!name_end)
-				{
-					return_value = DEBUGGER_E_INVALID_OPTIONS;
-					break;
-				}
+					return DEBUGGER_E_INVALID_OPTIONS;
 				*name_end = '\0'; // Although not actually necessary for _ttoi(), seems best for maintainability.
 				++name_end; // Set it up for the next iteration.
 			}
@@ -1690,91 +1680,74 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 			c = *name_end; // Set for the next iteration.
 		}
 		else if (!name)
-		{
-			return_value = DEBUGGER_E_INVALID_OPTIONS;
-			break;
-		}
+			return DEBUGGER_E_INVALID_OPTIONS;
 
 		// IDE should request .<base> only if it was returned by property_get or context_get,
 		// so this always means the object's base.  By contrast, .base might invoke some other
 		// property (if overridden) and ["base"] should invoke __item.
 		if (name && !_tcsicmp(name, _T("<base>")))
 		{
-			auto next_obj = iobj->Base();
-			if (!next_obj)
-				break;
-			next_obj->AddRef(); // Keep next object alive.
-			if (this_override) // Something like this_override.<base>.<base>.
-				iobj->Release(); // Release previous base object.
-			else
-				this_override = iobj;
-			iobj = next_obj;
-			if (c) continue; // Search the base object's fields.
+			if (invoke_flags != IF_SUBSTITUTE_THIS) // i.e. it's not already *implicitly* the value's base.
+				this_obj = this_obj->Base();
+			invoke_flags = IF_SUPER;
+			if (!this_obj) // Any.Prototype.<base>
+				return DEBUGGER_E_UNKNOWN_PROPERTY;
+			if (c) goto continue_same_this_obj;
 			// For property_set, this won't allow the base to be set (success="0").
 			// That seems okay since it could only ever be set to NULL anyway.
 			aResult.kind = PropValue;
-			aResult.value.SetValue(iobj);
-			aResult.this_object = this_override;
+			aResult.invokee = this_obj;
 			return DEBUGGER_E_OK;
 		}
 		else if (name && !_tcsicmp(name, _T("<enum>")))
 		{
-			if (c) continue;
-			if (this_override)
-				this_override->Release();
+			if (c) goto continue_same_this_obj; // Evaluate x.<enum>[1] as x[1]
 			aResult.kind = PropEnum;
-			aResult.value.SetValue(iobj);
+			aResult.invokee = this_obj;
 			return DEBUGGER_E_OK;
 		}
 
+		ResultToken t_this;
+		t_this.CopyValueFrom(aResult.value);
+		t_this.mem_to_free = aResult.value.mem_to_free;
+		aResult.value.InitResult(aResult.value.buf);
+
 		// Attempt to invoke property.
 		ExprTokenType *value_to_set = !c ? aSetValue : NULL;
-		ExprTokenType t_this(this_override ? this_override : iobj), *param[2];
+		ExprTokenType *param[2];
 		int param_count = 0;
 		if (t_key.symbol != SYM_MISSING)
 			param[param_count++] = &t_key;
 		if (value_to_set)
+		{
 			param[param_count++] = value_to_set;
-		int flags = (value_to_set ? IT_SET : IT_GET);
-		auto result = iobj->Invoke(aResult.value, flags, name, t_this, param, param_count);
+			invoke_flags |= IT_SET;
+		}
+		auto result = this_obj->Invoke(aResult.value, invoke_flags, name, t_this, param, param_count);
+
 		if (g->ThrownToken)
 			g_script.FreeExceptionToken(g->ThrownToken);
 
-		if (this_override)
+		if (aResult.value.symbol == SYM_STRING && !aResult.value.mem_to_free && aResult.value.marker != aResult.value.buf)
 		{
-			// This is a property other than .<base>, so this_override does not apply
-			// to the result of this property, but may "own" the value in result_token.
-			iobj->Release();
-			iobj = this_override;
-			this_override = nullptr;
+			// Before releasing the target object, make a copy of the string in case it points
+			// to memory contained by the target object, which might be deleted via Release().
+			if (!TokenSetResult(aResult.value, aResult.value.marker, aResult.value.marker_length))
+				result = FAIL;
 		}
+		t_this.Free();
 		
 		if (result == INVOKE_NOT_HANDLED)
-			break;
+			return DEBUGGER_E_UNKNOWN_PROPERTY;
 		if (!result)
-		{
-			return_value = DEBUGGER_E_EVAL_FAIL;
-			break;
-		}
+			return DEBUGGER_E_EVAL_FAIL;
 		if (!c)
 		{
 			if (!value_to_set)
 				aResult.kind = PropValue;
-			return_value = DEBUGGER_E_OK;
-			break;
+			return DEBUGGER_E_OK;
 		}
-		if (aResult.value.symbol != SYM_OBJECT)
-			// No usable target object for the next iteration, therefore the property mustn't exist.
-			break;
-		iobj->Release();
-		iobj = aResult.value.object;
-		//aResult.value.Free(); // Must not due to the line above.
-		aResult.value.InitResult(aResult.value.buf);
 	}
-	if (this_override)
-		this_override->Release();
-	iobj->Release();
-	return return_value;
 }
 
 
@@ -1879,7 +1852,7 @@ int Debugger::property_get_or_value(char **aArgV, int aArgCount, char *aTransact
 			// between UTF-8 and LPTSTR):
 			prop.name = name;
 			if (prop.kind == PropEnum)
-				err = WriteEnumItems(prop, prop.value.object);
+				err = WriteEnumItems(prop);
 			else
 				err = WritePropertyXml(prop);
 		}
@@ -2960,17 +2933,16 @@ void Debugger::PropertyWriter::WriteProperty(ExprTokenType &aKey, ExprTokenType 
 void Debugger::PropertyWriter::WriteBaseProperty(IObject *aBase)
 {
 	mProp.fullname.Append(".<base>", 7);
-	_WriteProperty(ExprTokenType(aBase), mProp.this_object ? mProp.this_object : mObject);
+	_WriteProperty(mProp.value, aBase);
 }
 
 
 void Debugger::PropertyWriter::WriteDynamicProperty(LPTSTR aName)
 {
 	FuncResult result_token;
-	ExprTokenType t_this(mProp.this_object ? mProp.this_object : mObject);
 	auto excpt_mode = g->ExcptMode;
 	g->ExcptMode |= EXCPTMODE_CATCH;
-	auto result = mObject->Invoke(result_token, IT_GET, aName, t_this, nullptr, 0);
+	auto result = mProp.invokee->Invoke(result_token, IT_GET, aName, mProp.value, nullptr, 0);
 	g->ExcptMode = excpt_mode;
 	if (!result)
 	{
@@ -2984,15 +2956,15 @@ void Debugger::PropertyWriter::WriteDynamicProperty(LPTSTR aName)
 }
 
 
-void Debugger::PropertyWriter::_WriteProperty(ExprTokenType &aValue, IObject *aThisOverride)
+void Debugger::PropertyWriter::_WriteProperty(ExprTokenType &aValue, IObject *aInvokee)
 {
 	if (mError)
 		return;
 	PropertyInfo prop(mProp.fullname, mProp.value.buf);
-	if (aThisOverride)
+	if (aInvokee)
 	{
-		aThisOverride->AddRef();
-		prop.this_object = aThisOverride;
+		aInvokee->AddRef();
+		prop.invokee = aInvokee;
 	}
 	// Find the property's "relative" name at the end of the buffer:
 	prop.name = mProp.fullname.GetString() + mNameLength;
@@ -3021,9 +2993,9 @@ void Debugger::PropertyWriter::BeginProperty(LPCSTR aName, LPCSTR aType, int aNu
 
 	if (mDepth == 1) // Write <property> for the object itself.
 	{
-		LPTSTR classname = mObject->Type();
+		LPTSTR classname = mProp.invokee->Type();
 		mError = mDbg.mResponseBuf.WriteF("<property name=\"%e\" fullname=\"%e\" type=\"%s\" facet=\"%s\" classname=\"%s\" address=\"%p\" size=\"0\" page=\"%i\" pagesize=\"%i\" children=\"%i\" numchildren=\"%i\">"
-					, mProp.name, mProp.fullname.GetString(), aType, mProp.facet, U4T(classname), mObject, mProp.page, mProp.pagesize, aNumChildren > 0, aNumChildren);
+					, mProp.name, mProp.fullname.GetString(), aType, mProp.facet, U4T(classname), mProp.invokee, mProp.page, mProp.pagesize, aNumChildren > 0, aNumChildren);
 		return;
 	}
 

@@ -358,15 +358,13 @@ private:
 		VarBkp *bkp;
 		Object::Variant *field;
 		ResultToken value;
-		IObject *this_object = nullptr;
+		IObject *invokee = nullptr;
 		PropertySource(LPTSTR aResultBuf)
 		{
 			value.InitResult(aResultBuf);
 		}
 		~PropertySource()
 		{
-			if (this_object)
-				this_object->Release();
 			value.Free();
 		}
 	};
@@ -390,15 +388,13 @@ private:
 	{
 		Debugger &mDbg;
 		PropertyInfo &mProp;
-		IObject *mObject;
 		size_t mNameLength;
 		int mDepth;
 		int mError;
 
-		PropertyWriter(Debugger &aDbg, PropertyInfo &aProp, IObject *aObject)
+		PropertyWriter(Debugger &aDbg, PropertyInfo &aProp)
 			: mDbg(aDbg)
 			, mProp(aProp)
-			, mObject(aObject)
 			, mNameLength(aProp.fullname.GetLength())
 			, mDepth(0)
 			, mError(0)
@@ -412,7 +408,7 @@ private:
 		void WriteDynamicProperty(LPTSTR aName);
 		void WriteEnumItems(IObject *aEnumerable, int aStart, int aEnd);
 
-		void _WriteProperty(ExprTokenType &aValue, IObject *aThisOverride = nullptr);
+		void _WriteProperty(ExprTokenType &aValue, IObject *aInvokee = nullptr);
 
 		void BeginProperty(LPCSTR aName, LPCSTR aType, int aNumChildren, DebugCookie &aCookie);
 		void EndProperty(DebugCookie aCookie);
@@ -445,12 +441,12 @@ private:
 
 	int WritePropertyXml(PropertyInfo &aProp);
 	int WritePropertyXml(PropertyInfo &aProp, LPTSTR aName);
-	int WritePropertyXml(PropertyInfo &aProp, IObject *aObject);
+	int WritePropertyObjectXml(PropertyInfo &aProp);
 
 	int WritePropertyData(LPCTSTR aData, size_t aDataSize, int aMaxEncodedSize);
 	int WritePropertyData(ExprTokenType &aValue, int aMaxEncodedSize);
 
-	int WriteEnumItems(PropertyInfo &aProp, IObject *aObject);
+	int WriteEnumItems(PropertyInfo &aProp);
 
 	int ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, ExprTokenType *aSetValue
 		, PropertySource &aResult);
