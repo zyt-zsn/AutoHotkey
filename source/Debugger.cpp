@@ -1263,7 +1263,10 @@ void Debugger::PropertyWriter::WriteEnumItems(IObject *aEnumerable, int aStart, 
 	auto result = GetEnumerator(enumerator, ExprTokenType(aEnumerable), 2, false);
 	if (result != OK)
 	{
-		mError = DEBUGGER_E_EVAL_FAIL;
+		// Just return no items, since setting an error would prevent any other properties
+		// from being returned.  For context_get in particular, one bad __Enum could break
+		// the client's ability to list variables.
+		//mError = DEBUGGER_E_EVAL_FAIL;
 		return;
 	}
 
