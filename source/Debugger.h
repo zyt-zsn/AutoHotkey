@@ -409,6 +409,8 @@ private:
 
 		void BeginProperty(LPCSTR aName, LPCSTR aType, int aNumChildren, DebugCookie &aCookie);
 		void EndProperty(DebugCookie aCookie);
+
+		ExprTokenType &ThisToken() { return mProp.value; }
 	};
 
 

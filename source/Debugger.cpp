@@ -1201,38 +1201,37 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 
 	if (aDepth > 0)
 	{
+		auto props = new PropEnum(this, aDebugger->ThisToken());
+		Var vname, vval;
+
 		int page_start = aPageSize * aPage, page_end = aPageSize * (aPage + 1);
+		int i = 0;
 
 		if (mBase)
 		{
 			// Since this object has a "base", let it count as the first field.
 			if (page_start == 0) // i.e. this is the first page.
-			{
 				aDebugger->WriteBaseProperty(mBase);
-				// Now fall through and retrieve field[0] (unless aPageSize == 1).
-			}
-			// So 20..39 becomes 19..38 when there's a base object:
-			else --page_start;
-			--page_end;
+			++i;
 		}
-		int i = page_start; // But check the upper bound each iteration, since dynamic properties can add/delete fields.
+
+		// For each field NOT in the requested page...
+		for (; i < page_start && props->Next(nullptr, nullptr) == CONDITION_TRUE; ++i);
+
 		// For each field in the requested page...
-		for ( ; i < page_end && (index_t)i < mFields.Length(); ++i)
+		for (; i < page_end; ++i)
 		{
-			Object::FieldType &field = mFields[i];
+			auto result = props->Next(&vname, &vval);
+			if (result == CONDITION_FALSE)
+				break;
 			ExprTokenType value;
-			if (field.symbol == SYM_DYNAMIC || field.symbol == SYM_TYPED_FIELD)
-			{
-				if (field.prop->NoEnumGet)
-					continue;
-				aDebugger->WriteDynamicProperty(field.name);
-			}
-			else
-			{
-				field.ToToken(value);
-				aDebugger->WriteProperty(field.name, value);
-			}
+			if (result == CONDITION_TRUE)
+				vval.ToTokenSkipAddRef(value);
+			else // For PropEnum, this means a property was enumerated but its getter failed/exited.
+				value.SetValue(_T("<error>"), 7);
+			aDebugger->WriteProperty(vname.Contents(), value);
 		}
+
 		if (enum_method && i < page_end)
 		{
 			if (dynamic_cast<NativeFunc *>(enum_method))
@@ -1248,6 +1247,8 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 				aDebugger->EndProperty(cookie);
 			}
 		}
+
+		props->Release();
 	}
 
 	aDebugger->EndProperty(cookie);
@@ -3011,8 +3012,8 @@ void Debugger::PropertyWriter::BeginProperty(LPCSTR aName, LPCSTR aType, int aNu
 	if (mDepth == 1) // Write <property> for the object itself.
 	{
 		LPTSTR classname = mProp.invokee->Type();
-		mError = mDbg.mResponseBuf.WriteF("<property name=\"%e\" fullname=\"%e\" type=\"%s\" facet=\"%s\" classname=\"%s\" address=\"%p\" size=\"0\" page=\"%i\" pagesize=\"%i\" children=\"%i\" numchildren=\"%i\">"
-					, mProp.name, mProp.fullname.GetString(), aType, mProp.facet, U4T(classname), mProp.invokee, mProp.page, mProp.pagesize, aNumChildren > 0, aNumChildren);
+		mError = mDbg.mResponseBuf.WriteF("<property name=\"%e\" fullname=\"%e\" type=\"%s\" facet=\"%s\" classname=\"%s\" address=\"%p\" size=\"0\" page=\"%i\" pagesize=\"%i\" children=\"%i\">"
+					, mProp.name, mProp.fullname.GetString(), aType, mProp.facet, U4T(classname), mProp.invokee, mProp.page, mProp.pagesize, aNumChildren > 0);
 		return;
 	}
 
@@ -3030,8 +3031,8 @@ void Debugger::PropertyWriter::BeginProperty(LPCSTR aName, LPCSTR aType, int aNu
 	aCookie = (DebugCookie)mNameLength;
 	mNameLength = mProp.fullname.GetLength();
 
-	mError = mDbg.mResponseBuf.WriteF("<property name=\"%e\" fullname=\"%e\" type=\"%s\" size=\"0\" page=\"0\" pagesize=\"%i\" children=\"%i\" numchildren=\"%i\">"
-				, name, mProp.fullname.GetString(), aType, mProp.pagesize, aNumChildren > 0, aNumChildren);
+	mError = mDbg.mResponseBuf.WriteF("<property name=\"%e\" fullname=\"%e\" type=\"%s\" size=\"0\" page=\"0\" pagesize=\"%i\" children=\"%i\">"
+				, name, mProp.fullname.GetString(), aType, mProp.pagesize, aNumChildren > 0);
 }
 
 

@@ -307,6 +307,7 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 	virtual void WriteEnumItems(IObject *aEnumerable, int aStart, int aEnd) = 0;
 	virtual void BeginProperty(LPCSTR aName, LPCSTR aType, int aNumChildren, DebugCookie &aCookie) = 0;
 	virtual void EndProperty(DebugCookie aCookie) = 0;
+	virtual ExprTokenType &ThisToken() = 0;
 };
 
 #endif

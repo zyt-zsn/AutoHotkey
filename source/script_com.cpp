@@ -1998,7 +1998,7 @@ void WriteComObjType(IDebugProperties *aDebugger, ComObject *aObject, LPCSTR aNa
 void ComObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aDepth)
 {
 	DebugCookie rootCookie;
-	aDebugger->BeginProperty(NULL, "object", 2 + (mVarType == VT_DISPATCH)*2 + (mEventSink != NULL), rootCookie);
+	aDebugger->BeginProperty(NULL, "object", 2, rootCookie);
 	if (aPage == 0 && aDepth > 0)
 	{
 		// For simplicity, assume aPageSize >= 2.

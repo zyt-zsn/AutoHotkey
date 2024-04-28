@@ -2745,6 +2745,15 @@ Object::PropEnum::PropEnum(Object *aObject)
 	memset(mIndex, 0, mIndexCount * sizeof(index_t));
 	mObject = aObject;
 	mObject->AddRef();
+	mThisToken.SetValue(mObject);
+}
+
+
+Object::PropEnum::PropEnum(Object *aObject, ExprTokenType &aThisToken)
+	: PropEnum(aObject)
+{
+	mThisToken.CopyValueFrom(aThisToken);
+	mDebuggerMode = true;
 }
 
 
@@ -2759,13 +2768,13 @@ ResultType Object::PropEnum::Next(Var *aName, Var *aVal)
 {
 	int nextidx, testidx = 0;
 	Object *nextobj = nullptr;
-	bool is_proto = mObject->IsClassPrototype();
+	bool is_proto = mObject->IsClassPrototype() && !mDebuggerMode;
 	for (Object *testobj = mObject;; )
 	{
 		if (mIndex[testidx] < testobj->mFields.Length())
 		{
 			auto &testfld = testobj->mFields[mIndex[testidx]];
-			if (!testfld.enumerable
+			if (!testfld.enumerable && (testidx || !mDebuggerMode)
 				|| testfld.symbol == SYM_DYNAMIC && (testfld.prop->NoEnumGet || !testfld.prop->Getter() || is_proto))
 			{
 				++mIndex[testidx]; // Skip this property.
@@ -2801,7 +2810,7 @@ ResultType Object::PropEnum::Next(Var *aName, Var *aVal)
 	if (aVal && result)
 	{
 		FuncResult result_token;
-		auto result = mObject->GetFieldValue(result_token, IT_GET | IF_BYPASS___VALUE, field, ExprTokenType(mObject));
+		auto result = mObject->GetFieldValue(result_token, IT_GET | IF_BYPASS___VALUE, field, mThisToken);
 		if (result == FAIL || result == EARLY_EXIT)
 			return result;
 		if (result_token.mem_to_free)
