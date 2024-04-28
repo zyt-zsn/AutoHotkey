@@ -1514,7 +1514,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 
 	aResult.kind = PropNone;
 
-	name_end = StrChrAny(name, _T(".["));
+	name_end = StrChrAny(name, _T(".[("));
 	if (name_end)
 	{
 		c = *name_end;
@@ -1633,7 +1633,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 			name = name_end + 1;
 			// For simplicity, let this be any string terminated by '.' or '['.
 			// Actual expressions require it to contain only alphanumeric chars and/or '_'.
-			name_end = StrChrAny(name, _T(".[")); // This also sets it up for the next iteration.
+			name_end = StrChrAny(name, _T(".[(")); // This also sets it up for the next iteration.
 			if (name_end)
 			{
 				c = *name_end; // Save this for the next iteration.
@@ -1647,8 +1647,13 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 
 		ExprTokenType t_key;
 		t_key.symbol = SYM_MISSING;
-		if (c == '[' && !(name && *name == '<')) // <base> and <enum> aren't actual properties, so don't accept parameters.
+		if ((c == '[' || c == '(') && !(name && *name == '<')) // <base> and <enum> aren't actual properties, so don't accept parameters.
 		{
+			// Calling a function or method is just a matter of adding the IT_CALL flag, so we do a
+			// minimal amount of work here to allow property_get to be used to call functions.
+			TCHAR end_char = c == '(' ? ')' : ']';
+			if (c == '(')
+				invoke_flags |= IT_CALL;
 			src = name_end + 1;
 			if (*src == '"')
 			{
@@ -1668,7 +1673,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 					}
 					*dst++ = c;
 				}
-				if (*src != ']')
+				if (*src != end_char)
 					return DEBUGGER_E_INVALID_OPTIONS;
 				t_key.marker_length = dst - t_key.marker;
 				*dst = '\0'; // Only after the check above, since src might be == dst.
@@ -1680,7 +1685,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 				t_key.symbol = SYM_OBJECT;
 				src += 7;
 				name_end = _tcschr(src, ')');
-				if (!name_end || name_end[1] != ']')
+				if (!name_end || name_end[1] != end_char)
 					return DEBUGGER_E_INVALID_OPTIONS;
 				*name_end = '\0';
 				name_end += 2; // Set it up for the next iteration.
@@ -1688,10 +1693,11 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 			else
 			{
 				// The only other valid form is a literal signed integer.
-				t_key.symbol = SYM_INTEGER;
-				name_end = _tcschr(src, ']');
-				if (!name_end)
+				t_key.value_int64 = istrtoi64(src, &name_end);
+				if (*name_end != end_char)
 					return DEBUGGER_E_INVALID_OPTIONS;
+				if (name_end > src)
+					t_key.symbol = SYM_INTEGER;
 				*name_end = '\0'; // Although not actually necessary for _ttoi(), seems best for maintainability.
 				++name_end; // Set it up for the next iteration.
 			}
