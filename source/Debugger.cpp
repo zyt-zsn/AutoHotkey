@@ -270,11 +270,17 @@ int Debugger::ProcessCommands(LPCSTR aBreakReason)
 	// Such commands include:
 	//  - property_get when evaluation of an object property is required.
 	//  - property_set when an object with __delete is released.
-	if (mInternalState == DIS_Break)
+	// Note that both the executing command and pending command could be asynchronous.
+	// Although re-entry could be supported by preserving data already in the buffers,
+	// more complexity would be needed to ensure each command is given the chance to
+	// complete before another one is pushed onto the stack (otherwise, rapid commands
+	// could cause stack exhaustion).
+	if (mProcessingCommands)
 		return DEBUGGER_E_OK;
 	if (aBreakReason)
 		if (err = EnterBreakState(aBreakReason))
 			return err;
+	mProcessingCommands = true;
 
 	// Disable notification of READ readiness and reset socket to synchronous mode.
 	u_long zero = 0;
@@ -373,6 +379,7 @@ int Debugger::ProcessCommands(LPCSTR aBreakReason)
 		}
 	}
 	ASSERT(mInternalState != DIS_Break);
+	mProcessingCommands = false;
 	// Register for message-based notification of data arrival.  If a command
 	// is received asynchronously, control will be passed back to the debugger
 	// to process it.  This allows the debugger engine to respond even if the

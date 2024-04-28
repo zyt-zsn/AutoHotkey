@@ -190,7 +190,7 @@ public:
 	void Exit(ExitReasons aExitReason, char *aCommandName=NULL); // Called when exiting AutoHotkey.
 	inline bool IsConnected() { return mSocket != INVALID_SOCKET; }
 	inline bool IsStepping() { return mInternalState >= DIS_StepInto; }
-	inline bool IsAtBreak() { return mInternalState == DIS_Break; }
+	inline bool IsAtBreak() { return mProcessingCommands; }
 	inline bool HasStdErrHook() { return mStdErrMode != SR_Disabled; }
 	inline bool HasStdOutHook() { return mStdOutMode != SR_Disabled; }
 	inline bool BreakOnExceptionIsEnabled() { return mBreakOnException; }
@@ -336,6 +336,7 @@ private:
 	int mMaxPropertyData = 1024, mMaxChildren = 20, mMaxDepth = 2;
 
 	HookType mDisabledHooks = 0;
+	bool mProcessingCommands;
 
 
 	enum PropertyType
