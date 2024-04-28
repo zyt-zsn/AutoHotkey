@@ -144,6 +144,7 @@ ResultType Line::SetThrownToken(global_struct &g, ResultToken *aToken, ResultTyp
 #ifdef CONFIG_DEBUGGER
 	if (g_Debugger.IsConnected())
 		if (g_Debugger.IsAtBreak() || g_Debugger.PreThrow(aToken) && !(g.ExcptMode & EXCPTMODE_CATCH))
+		{
 			// IsAtBreak() indicates the debugger was already in a break state, likely
 			// processing a property_get or context_get which caused script execution.
 			// In that case, silence all error dialogs and don't set g.ThrownToken since
@@ -152,7 +153,9 @@ ResultType Line::SetThrownToken(global_struct &g, ResultToken *aToken, ResultTyp
 			// chance to inspect the exception and report it.  There's nothing in the DBGp
 			// spec about what to do next, probably since PHP would just log the error.
 			// In our case, it seems more useful to suppress the dialog than to show it.
+			g_script.FreeExceptionToken(aToken);
 			return FAIL;
+		}
 #endif
 	g.ThrownToken = aToken;
 	if (!(g.ExcptMode & EXCPTMODE_CATCH))
