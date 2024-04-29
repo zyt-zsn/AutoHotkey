@@ -1673,36 +1673,41 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 					}
 					*dst++ = c;
 				}
-				if (*src != end_char)
-					return DEBUGGER_E_INVALID_OPTIONS;
+				*dst = '\0';
 				t_key.marker_length = dst - t_key.marker;
-				*dst = '\0'; // Only after the check above, since src might be == dst.
-				name_end = src + 1; // Set it up for the next iteration.
+				name_end = src;
 			}
 			else if (!_tcsnicmp(src, _T("Object("), 7))
 			{
 				// Object(n) where n is the address of a key object, as a literal signed integer.
-				t_key.symbol = SYM_OBJECT;
-				src += 7;
-				name_end = _tcschr(src, ')');
-				if (!name_end || name_end[1] != end_char)
+				t_key.value_int64 = istrtoi64(src + 7, &name_end);
+				if (*name_end != ')')
 					return DEBUGGER_E_INVALID_OPTIONS;
-				*name_end = '\0';
-				name_end += 2; // Set it up for the next iteration.
+				t_key.symbol = SYM_OBJECT;
+				++name_end;
 			}
 			else
 			{
-				// The only other valid form is a literal signed integer.
-				t_key.value_int64 = istrtoi64(src, &name_end);
-				if (*name_end != end_char)
-					return DEBUGGER_E_INVALID_OPTIONS;
-				if (name_end > src)
-					t_key.symbol = SYM_INTEGER;
-				*name_end = '\0'; // Although not actually necessary for _ttoi(), seems best for maintainability.
-				++name_end; // Set it up for the next iteration.
+				LPTSTR iend, fend;
+				auto ival = istrtoi64(src, &iend);
+				auto fval = _tcstod(src, &fend);
+				if (fend > iend)
+				{
+					t_key.SetValue(fval);
+					name_end = fend;
+				}
+				else if (iend > src)
+				{
+					t_key.SetValue(ival);
+					name_end = iend;
+				}
+				else if (*src == end_char) // () or []
+					name_end = src;
+				//else *name_end == c, so the check below will treat this as an error.
 			}
-			if (t_key.symbol != SYM_STRING) // SYM_INTEGER or SYM_OBJECT
-				t_key.value_int64 = istrtoi64(src, nullptr);
+			if (*name_end != end_char)
+				return DEBUGGER_E_INVALID_OPTIONS;
+			++name_end; // Set it up for the next iteration.
 			c = *name_end; // Set for the next iteration.
 		}
 		else if (!name)
