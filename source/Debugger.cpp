@@ -1842,23 +1842,14 @@ int Debugger::property_get_or_value(char **aArgV, int aArgCount, char *aTransact
 		// Var not found/invalid name.
 		if (!aIsPropertyGet)
 			return err;
-
-		// NOTEPAD++ DBGP PLUGIN:
-		// The DBGp plugin for Notepad++ assumes property_get will always succeed.
-		// Property retrieval on mouse hover does not choose words intelligently,
-		// so it will attempt to retrieve properties like ";" or " r".
-		// If we respond with an <error/> instead of a <property/>, Notepad++ will
-		// show an error message and then become unstable. Even after the editor
-		// window is closed, notepad++.exe must be terminated forcefully.
-		//
-		// As a work-around (until this is resolved by the plugin's author),
-		// we return a property with an empty value and the 'undefined' type.
-		
-		return mResponseBuf.WriteF(
-			"<response command=\"property_get\" transaction_id=\"%e\">"
-				"<property name=\"%e\" fullname=\"%e\" type=\"undefined\" facet=\"\" size=\"0\" children=\"0\"/>"
-			"</response>"
-			, aTransactionId, name, name);
+		// Return a value of type "undefined".  This was originally done to work around
+		// an issue with the DBGp plugin for Notepad++, but that was last updated in 2012
+		// and doesn't support Notepad++ 64-bit.  Now it's done for compatibility with
+		// AutoHotkey-specific clients that may have come to rely on it:
+		prop.kind = PropValue;
+		if (prop.value.symbol == SYM_OBJECT)
+			prop.value.object->Release();
+		prop.value.symbol = SYM_MISSING;
 	}
 	//else var and field were set by the called function.
 
