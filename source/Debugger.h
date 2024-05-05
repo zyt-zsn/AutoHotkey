@@ -436,6 +436,7 @@ private:
 	int GetPropertyInfo(VarBkp &aBkp, PropertyInfo &aProp);
 	
 	int GetPropertyValue(Var &aVar, ResultToken &aValue);
+	int GetPropertyValue(VarBkp &aBkp, ResultToken &aValue);
 
 	int WritePropertyXml(PropertyInfo &aProp);
 	int WritePropertyXml(PropertyInfo &aProp, LPTSTR aName);

@@ -1139,15 +1139,9 @@ int Debugger::GetPropertyInfo(Var &aVar, PropertyInfo &aProp)
 
 int Debugger::GetPropertyInfo(VarBkp &aBkp, PropertyInfo &aProp)
 {
-	aProp.is_static = false;
-	if (aProp.is_alias = aBkp.mType == VAR_ALIAS)
-	{
-		aProp.is_builtin = aBkp.mAliasFor->mType == VAR_VIRTUAL;
-		return GetPropertyValue(*aBkp.mAliasFor, aProp.value);
-	}
-	aProp.is_builtin = false;
-	aBkp.ToToken(aProp.value);
-	return DEBUGGER_E_OK;
+	Var temp; // Never freed, as that would invalidate aBkp.
+	temp.Restore(aBkp);
+	return GetPropertyInfo(temp, aProp);
 }
 
 int Debugger::GetPropertyValue(Var &aVar, ResultToken &aValue)
@@ -1156,7 +1150,6 @@ int Debugger::GetPropertyValue(Var &aVar, ResultToken &aValue)
 	{
 		aValue.Free();
 		aValue.InitResult(aValue.buf);
-		aValue.symbol = SYM_INTEGER; // Virtual vars, like BIFs, expect this default.
 		aVar.Get(aValue);
 		if (aValue.symbol == SYM_OBJECT)
 			aValue.object->AddRef(); // See comments in ExpandExpression and BIV_TrayMenu.
@@ -1170,6 +1163,13 @@ int Debugger::GetPropertyValue(Var &aVar, ResultToken &aValue)
 		aVar.ToToken(aValue);
 	}
 	return DEBUGGER_E_OK;
+}
+
+int Debugger::GetPropertyValue(VarBkp &aBkp, ResultToken &aValue)
+{
+	Var temp; // Never freed, as that would invalidate aBkp.
+	temp.Restore(aBkp);
+	return GetPropertyValue(temp, aValue);
 }
 
 
@@ -1652,14 +1652,9 @@ int Debugger::ParsePropertyName(LPWSTR aNamePtr, int aDepth, int aVarScope, Expr
 				if (varbkp && varbkp->mType == VAR_ALIAS)
 					var = varbkp->mAliasFor;
 				if (var)
-				{
-					if (err = GetPropertyValue(*var, lastval))
-						break;
-				}
+					err = GetPropertyValue(*var, lastval);
 				else
-				{
-					varbkp->ToToken(lastval);
-				}
+					err = GetPropertyValue(*varbkp, lastval);
 			}
 			else if (inv->outer && (c == ',' || c == inv->end_char))
 			{
