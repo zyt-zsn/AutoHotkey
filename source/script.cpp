@@ -2300,11 +2300,17 @@ process_completed_line:
 					buf[buf_length] = '\0';
 					// Before adding the line, apply expression line-continuation logic, which hasn't
 					// been applied yet because hotkey labels can contain unbalanced ()[]{}:
+					auto open_block = mOpenBlock;
 					if (   !GetLineContExpr(fp, buf, next_buf, phys_line_number, has_continuation_section)
 						|| !AddLine(ACT_BLOCK_BEGIN)			// Implicit start of function
 						|| !ParseAndAddLine(buf)				// Function body - one line
 						|| !AddLine(ACT_BLOCK_END))				// Implicit end of function
 						return FAIL;
+					if (open_block != mOpenBlock) // key::try { or similar.
+					{
+						mCurrLine = nullptr;
+						return ScriptError(ERR_HOTKEY_MISSING_BRACE);
+					}
 				}
 			}
 			goto continue_main_loop; // In lieu of "continue", for performance.
