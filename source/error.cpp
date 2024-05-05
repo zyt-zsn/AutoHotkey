@@ -192,10 +192,10 @@ BIF_DECL(BIF_Throw)
 		delete token;
 		_f_throw_oom;
 	}
-	if (FAIL == g_script.mCurrLine->SetThrownToken(*g, token, FAIL_OR_OK))
-		aResultToken.SetExitResult(FAIL);
-	else
-		aResultToken.symbol = SYM_MISSING;
+	// Throw() isn't made continuable in v2.1 because existing v2.0 code isn't
+	// expected to deal with the possibility that the thread doesn't exit.
+	g_script.mCurrLine->SetThrownToken(*g, token, FAIL);
+	aResultToken.SetExitResult(FAIL);
 }
 
 
