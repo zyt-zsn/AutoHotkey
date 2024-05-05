@@ -2686,16 +2686,16 @@ int Debugger::Buffer::EstimateFileURILength(LPCTSTR aPath)
 
 // Convert a file path to a URI and write it to the buffer.
 // Caller has already verified there is enough space in the buffer.
-void Debugger::Buffer::WriteFileURI(LPCTSTR aPath)
+void Debugger::Buffer::WriteFileURI(LPCWSTR aPath)
 {
 	memcpy(mData + mDataUsed, "file:///", 8);
 	mDataUsed += 8;
 
-	CStringUTF8FromTChar path8(aPath);
+	char utf8[4];
 
 	// Write to the buffer, encoding as we go.
 	int c;
-	for (LPCSTR ptr = path8; c = *ptr; ++ptr)
+	for (auto ptr = aPath; c = *ptr; ++ptr)
 	{
 		if (cisalnum(c) || strchr("-_.!~*()/", c))
 		{
@@ -2708,9 +2708,15 @@ void Debugger::Buffer::WriteFileURI(LPCTSTR aPath)
 		}
 		else
 		{
-			int len = sprintf(mData + mDataUsed, "%%%02X", c & 0xff);
-			if (len != -1)
-				mDataUsed += len;
+			bool extra = IS_SURROGATE_PAIR(ptr[0], ptr[1]);
+			int utf8_size = WideCharToMultiByte(CP_UTF8, 0, ptr, 1 + extra, utf8, sizeof(utf8), NULL, NULL);
+			ptr += extra;
+			for (int i = 0; i < utf8_size; ++i)
+			{
+				int len = sprintf(mData + mDataUsed, "%%%02X", utf8[i] & 0xff);
+				if (len != -1)
+					mDataUsed += len;
+			}
 		}
 	}
 }
