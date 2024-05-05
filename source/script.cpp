@@ -6013,7 +6013,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	if (mClassObjectCount) // Nested class definition.
 	{
 		outer_class = mClassObject[mClassObjectCount - 1];
-		if (outer_class->GetOwnProp(token, class_name))
+		if (outer_class->HasOwnProp(class_name))
 		{
 			conflict_found = true;
 			// If "continuing" a predefined class was permitted, this is where we would
@@ -6519,13 +6519,12 @@ ResultType Script::ResolveClasses()
 	if (!base)
 		return OK;
 	// There is at least one unresolved class.
-	ExprTokenType token;
-	if (base->GetOwnProp(token, _T("Line")))
+	if (__int64 line = base->GetOwnPropInt64(_T("Line")))
 	{
 		// In this case (an object in the mUnresolvedClasses list), it is always an integer
 		// containing the file index and line number:
-		mCurrFileIndex = int(token.value_int64 >> 32);
-		mCombinedLineNumber = LineNumberType(token.value_int64);
+		mCurrFileIndex = int(line >> 32);
+		mCombinedLineNumber = LineNumberType(line);
 	}
 	mCurrLine = NULL;
 	return ScriptError(_T("Unknown class."), name);

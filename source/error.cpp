@@ -339,9 +339,8 @@ void InsertCallStack(HWND re, ErrorBoxParam &error)
 	if (error.obj && error.obj->IsOfType(Object::sPrototype))
 	{
 		auto obj = static_cast<Object*>(error.obj);
-		ExprTokenType stk;
-		if (obj->GetOwnProp(stk, _T("Stack")) && stk.symbol == SYM_STRING)
-			stack = stk.marker;
+		if (auto temp = obj->GetOwnPropString(_T("Stack")))
+			stack = temp;
 	}
 	else if (error.stack_index >= 0)
 	{
@@ -511,11 +510,8 @@ void InitErrorBox(HWND hwnd, ErrorBoxParam &error)
 		LineNumberType line = 0;
 		if (error.obj)
 		{
-			ExprTokenType t;
-			if (error.obj->GetOwnProp(t, _T("File")))
-				file = TokenToString(t);
-			if (error.obj->GetOwnProp(t, _T("Line")))
-				line = (LineNumberType)TokenToInt64(t);
+			file = error.obj->GetOwnPropString(_T("File"));
+			line = (LineNumberType)error.obj->GetOwnPropInt64(_T("Line"));
 		}
 		else
 		{
@@ -534,13 +530,7 @@ void InitErrorBox(HWND hwnd, ErrorBoxParam &error)
 		}
 	}
 
-	LPCTSTR footer = nullptr;
-	if (error.obj)
-	{
-		ExprTokenType t;
-		if (error.obj->GetOwnProp(t, _T("Hint")))
-			footer = TokenToString(t, buf);
-	}
+	LPCTSTR footer = error.obj ? error.obj->GetOwnPropString(_T("Hint")) : nullptr;
 	if (footer) // Footer was specified.
 	{
 		if (!*footer) // Explicitly blank: omit default footer.
@@ -567,11 +557,10 @@ void InitErrorBox(HWND hwnd, ErrorBoxParam &error)
 	}
 
 #ifdef CONFIG_DEBUGGER
-	ExprTokenType tk;
+	LPCTSTR stack;
 	if (   error.stack_index >= 0
 		|| error.obj && error.obj->IsOfType(Object::sPrototype)
-			&& static_cast<Object*>(error.obj)->GetOwnProp(tk, _T("Stack"))
-			&& !TokenIsEmptyString(tk)   )
+			&& (stack = error.obj->GetOwnPropString(_T("Stack"))) && *stack   )
 	{
 		// Stack trace appears to be available, so add a link to show it.
 		CHARRANGE cr;
@@ -1214,10 +1203,9 @@ ResultType Script::ShowError(Line* aLine, ResultType aErrorType, ExprTokenType *
 			message = TokenToString(t, message_buf);
 		if (ex->GetOwnProp(t, _T("Extra")))
 			extra = TokenToString(t, extra_buf);
-		LPCTSTR file;
-		LineNumberType line_no;
-		if (   ex->GetOwnProp(t, _T("File")) && *(file = TokenToString(t))
-			&& ex->GetOwnProp(t, _T("Line")) &&  (line_no = (LineNumberType)TokenToInt64(t))   )
+		LPCTSTR file = ex->GetOwnPropString(_T("File"));
+		LineNumberType line_no = (LineNumberType)ex->GetOwnPropInt64(_T("Line"));
+		if (file && *file && line_no)
 		{
 			// Locate the line by number and file index, then display that line instead
 			// of the caller supplied one since it's probably more relevant.

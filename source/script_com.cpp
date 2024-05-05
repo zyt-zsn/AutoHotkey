@@ -1468,9 +1468,8 @@ LPTSTR ComObject::Type()
 			return sBuf;
 		}
 	}
-	ExprTokenType value;
-	if (Base()->GetOwnProp(value, _T("__Class")))
-		return TokenToString(value);
+	if (auto classname = Base()->GetOwnPropString(_T("__Class")))
+		return classname;
 	return _T("ComValue"); // Provide a safe default in case __Class was removed.
 }
 
@@ -1913,8 +1912,7 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 						pExcepInfo->bstrSource = SysStringFromToken(token, result_token.buf);
 					if (obj->GetOwnProp(token, _T("File")))
 						pExcepInfo->bstrHelpFile = SysStringFromToken(token, result_token.buf);
-					if (obj->GetOwnProp(token, _T("Line")))
-						pExcepInfo->dwHelpContext = (DWORD)TokenToInt64(token);
+					pExcepInfo->dwHelpContext = (DWORD)obj->GetOwnPropInt64(_T("Line"));
 				}
 				else
 				{

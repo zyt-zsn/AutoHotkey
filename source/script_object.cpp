@@ -1204,12 +1204,11 @@ ResultType Object::SetBase(Object *aNewBase, ResultToken &aResultToken)
 LPTSTR Object::Type()
 {
 	Object *base;
-	ExprTokenType value;
-	if (GetOwnProp(value, _T("__Class")))
+	if (HasOwnProp(_T("__Class")))
 		return _T("Prototype"); // This object is a prototype.
 	for (base = mBase; base; base = base->mBase)
-		if (base->GetOwnProp(value, _T("__Class")))
-			return TokenToString(value); // This object is an instance of that class.
+		if (auto classname = base->GetOwnPropString(_T("__Class")))
+			return classname; // This object is an instance of that class.
 	return _T("Object"); // Provide a default in case __Class has been removed from all of the base objects.
 }
 

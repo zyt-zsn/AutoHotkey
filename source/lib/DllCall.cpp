@@ -801,9 +801,8 @@ has_valid_return_type:
 				{
 					if (this_param.symbol == SYM_MISSING)
 						_f_throw(ERR_PARAM_REQUIRED);
-					ExprTokenType tn;
-					_f_throw_type(param_proto->GetOwnProp(tn, _T("__Class")) && tn.symbol == SYM_STRING
-						? tn.marker : _T("Object"), *aParam[i + 1]);
+					auto classname = param_proto->GetOwnPropString(_T("__Class"));
+					_f_throw_type(classname ? classname : _T("Object"), *aParam[i + 1]);
 				}
 				if (aResultToken.Exited())
 					return;

@@ -1803,11 +1803,8 @@ bool BuiltInMethod::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int
 	// prototype objects, which are always really just Object.
 	if (!obj || !obj->IsOfType(mClass))
 	{
-		LPCTSTR expected_type;
-		ExprTokenType value;
-		if (mClass->GetOwnProp(value, _T("__Class")) && value.symbol == SYM_STRING)
-			expected_type = value.marker;
-		else
+		LPCTSTR expected_type = mClass->GetOwnPropString(_T("__Class"));
+		if (!expected_type)
 			expected_type = _T("?"); // Script may have tampered with the prototype.
 		aResultToken.TypeError(expected_type, *aParam[0]);
 	}

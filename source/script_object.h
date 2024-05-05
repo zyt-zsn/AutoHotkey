@@ -458,7 +458,29 @@ public:
 		field->ToToken(aToken);
 		return true;
 	}
+	
+	LPTSTR GetOwnPropString(name_t aName)
+	{
+		auto field = FindField(aName);
+		if (!field || field->symbol != SYM_STRING)
+			return nullptr;
+		return field->string.Value();
+	}
 
+	__int64 GetOwnPropInt64(name_t aName)
+	{
+		auto field = FindField(aName);
+		if (!field)
+			return 0;
+		switch (field->symbol)
+		{
+		case SYM_INTEGER: return field->n_int64;
+		case SYM_FLOAT: return (__int64)field->n_double;
+		case SYM_STRING: return ATOI(field->string);
+		}
+		return 0;
+	}
+	
 	IObject *GetOwnPropObj(name_t aName)
 	{
 		auto field = FindField(aName);
