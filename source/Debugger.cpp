@@ -1210,7 +1210,7 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 			// Since this object has a "base", let it count as the first field.
 			if (page_start == 0) // i.e. this is the first page.
 				aDebugger->WriteBaseProperty(mBase);
-			++i;
+			i++; // Count it even if it wasn't within the current page.
 		}
 
 		// For each field NOT in the requested page...
@@ -1235,7 +1235,7 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 			if (dynamic_cast<NativeFunc *>(enum_method))
 			{
 				// Built-in enumerators are always safe to call automatically.
-				aDebugger->WriteEnumItems(this, 0, page_end - i);
+				aDebugger->WriteEnumItems(this, page_start - i, page_end - i);
 			}
 			else
 			{
@@ -1256,7 +1256,8 @@ int Debugger::WriteEnumItems(PropertyInfo &aProp)
 {
 	aProp.facet = "";
 	PropertyWriter pw(*this, aProp);
-	pw.WriteEnumItems(aProp.invokee, aProp.page, aProp.page + aProp.pagesize);
+	int start = aProp.page * aProp.pagesize;
+	pw.WriteEnumItems(aProp.invokee, start, start + aProp.pagesize);
 	return pw.mError;
 }
 
@@ -1962,7 +1963,7 @@ int Debugger::property_get_or_value(char **aArgV, int aArgCount, char *aTransact
 	// It seems best to allow context id zero to retrieve either a local or global,
 	// rather than requiring the IDE to check each context when looking up a variable.
 	//case PC_Local:	always_use = FINDVAR_LOCAL; break;
-	case PC_Local:	always_use = FINDVAR_DEFAULT; break;
+	case PC_Local:	always_use = FINDVAR_FOR_READ; break;
 	case PC_Global:	always_use = FINDVAR_GLOBAL; break;
 	default:
 		return DEBUGGER_E_INVALID_CONTEXT;
@@ -1973,23 +1974,14 @@ int Debugger::property_get_or_value(char **aArgV, int aArgCount, char *aTransact
 		// Var not found/invalid name.
 		if (!aIsPropertyGet)
 			return err;
-
-		// NOTEPAD++ DBGP PLUGIN:
-		// The DBGp plugin for Notepad++ assumes property_get will always succeed.
-		// Property retrieval on mouse hover does not choose words intelligently,
-		// so it will attempt to retrieve properties like ";" or " r".
-		// If we respond with an <error/> instead of a <property/>, Notepad++ will
-		// show an error message and then become unstable. Even after the editor
-		// window is closed, notepad++.exe must be terminated forcefully.
-		//
-		// As a work-around (until this is resolved by the plugin's author),
-		// we return a property with an empty value and the 'undefined' type.
-		
-		return mResponseBuf.WriteF(
-			"<response command=\"property_get\" transaction_id=\"%e\">"
-				"<property name=\"%e\" fullname=\"%e\" type=\"undefined\" facet=\"\" size=\"0\" children=\"0\"/>"
-			"</response>"
-			, aTransactionId, name, name);
+		// Return a value of type "undefined".  This was originally done to work around
+		// an issue with the DBGp plugin for Notepad++, but that was last updated in 2012
+		// and doesn't support Notepad++ 64-bit.  Now it's done for compatibility with
+		// AutoHotkey-specific clients that may have come to rely on it:
+		prop.kind = PropValue;
+		if (prop.value.symbol == SYM_OBJECT)
+			prop.value.object->Release();
+		prop.value.symbol = SYM_MISSING;
 	}
 	//else var and field were set by the called function.
 
@@ -2827,16 +2819,16 @@ int Debugger::Buffer::EstimateFileURILength(LPCTSTR aPath)
 
 // Convert a file path to a URI and write it to the buffer.
 // Caller has already verified there is enough space in the buffer.
-void Debugger::Buffer::WriteFileURI(LPCTSTR aPath)
+void Debugger::Buffer::WriteFileURI(LPCWSTR aPath)
 {
 	memcpy(mData + mDataUsed, "file:///", 8);
 	mDataUsed += 8;
 
-	CStringUTF8FromTChar path8(aPath);
+	char utf8[4];
 
 	// Write to the buffer, encoding as we go.
 	int c;
-	for (LPCSTR ptr = path8; c = *ptr; ++ptr)
+	for (auto ptr = aPath; c = *ptr; ++ptr)
 	{
 		if (cisalnum(c) || strchr("-_.!~*()/", c))
 		{
@@ -2849,9 +2841,15 @@ void Debugger::Buffer::WriteFileURI(LPCTSTR aPath)
 		}
 		else
 		{
-			int len = sprintf(mData + mDataUsed, "%%%02X", c & 0xff);
-			if (len != -1)
-				mDataUsed += len;
+			bool extra = IS_SURROGATE_PAIR(ptr[0], ptr[1]);
+			int utf8_size = WideCharToMultiByte(CP_UTF8, 0, ptr, 1 + extra, utf8, sizeof(utf8), NULL, NULL);
+			ptr += extra;
+			for (int i = 0; i < utf8_size; ++i)
+			{
+				int len = sprintf(mData + mDataUsed, "%%%02X", utf8[i] & 0xff);
+				if (len != -1)
+					mDataUsed += len;
+			}
 		}
 	}
 }

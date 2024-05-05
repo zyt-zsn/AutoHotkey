@@ -311,7 +311,7 @@ private:
 		}
 	private:
 		int EstimateFileURILength(LPCTSTR aPath);
-		void WriteFileURI(LPCTSTR aPath);
+		void WriteFileURI(LPCWSTR aPath);
 	} mCommandBuf, mResponseBuf;
 
 	enum DebuggerInternalStateType {
