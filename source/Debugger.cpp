@@ -1134,7 +1134,7 @@ int Debugger::GetPropertyInfo(Var &aVar, PropertyInfo &aProp)
 	aProp.is_alias = aVar.mType == VAR_ALIAS;
 	aProp.is_static = aVar.IsStatic();
 	aProp.is_builtin = aVar.mType == VAR_VIRTUAL;
-	return GetPropertyValue(aVar, aProp);
+	return GetPropertyValue(aVar, aProp.value);
 }
 
 int Debugger::GetPropertyInfo(VarBkp &aBkp, PropertyInfo &aProp)
@@ -1143,34 +1143,32 @@ int Debugger::GetPropertyInfo(VarBkp &aBkp, PropertyInfo &aProp)
 	if (aProp.is_alias = aBkp.mType == VAR_ALIAS)
 	{
 		aProp.is_builtin = aBkp.mAliasFor->mType == VAR_VIRTUAL;
-		return GetPropertyValue(*aBkp.mAliasFor, aProp);
+		return GetPropertyValue(*aBkp.mAliasFor, aProp.value);
 	}
 	aProp.is_builtin = false;
-	aProp.invokee = nullptr;
 	aBkp.ToToken(aProp.value);
 	return DEBUGGER_E_OK;
 }
 
-int Debugger::GetPropertyValue(Var &aVar, PropertySource &aProp)
+int Debugger::GetPropertyValue(Var &aVar, ResultToken &aValue)
 {
 	if (aVar.IsVirtual())
 	{
-		aProp.value.Free();
-		aProp.value.InitResult(aProp.value.buf);
-		aProp.value.symbol = SYM_INTEGER; // Virtual vars, like BIFs, expect this default.
-		aVar.Get(aProp.value);
-		if (aProp.value.symbol == SYM_OBJECT)
-			aProp.value.object->AddRef(); // See comments in ExpandExpression and BIV_TrayMenu.
-		if (aProp.value.Exited())
+		aValue.Free();
+		aValue.InitResult(aValue.buf);
+		aValue.symbol = SYM_INTEGER; // Virtual vars, like BIFs, expect this default.
+		aVar.Get(aValue);
+		if (aValue.symbol == SYM_OBJECT)
+			aValue.object->AddRef(); // See comments in ExpandExpression and BIV_TrayMenu.
+		if (aValue.Exited())
 			return DEBUGGER_E_EVAL_FAIL;
 	}
 	else
 	{
-		aProp.value.Free();
-		aProp.value.mem_to_free = nullptr; // Any value would be overwritten but this must be cleared manually.
-		aVar.ToToken(aProp.value);
+		aValue.Free();
+		aValue.mem_to_free = nullptr; // Any value would be overwritten but this must be cleared manually.
+		aVar.ToToken(aValue);
 	}
-	aProp.invokee = nullptr;
 	return DEBUGGER_E_OK;
 }
 
@@ -1504,268 +1502,414 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 	, PropertySource &aResult)
 {
 	CStringTCharFromUTF8 name_buf(aFullName);
-	LPTSTR name = name_buf.GetBuffer();
-	size_t name_length;
-	TCHAR c, *name_end, *src, *dst;
-	Var *var = NULL;
-	VarBkp *varbkp = NULL;
+	return ParsePropertyName(name_buf.GetBuffer(), aDepth, aVarScope, aSetValue, aResult);
+}
 
+int Debugger::ParsePropertyName(LPWSTR aNamePtr, int aDepth, int aVarScope, ExprTokenType *aSetValue
+	, PropertySource &aResult)
+{
+	TCHAR c, *cp = aNamePtr, *cp_end;
+	
+	int err = DEBUGGER_E_OK;
+	ResultToken **temp = nullptr;
+	int temp_size = 0, temp_count = 0;
+	ExprTokenType **param_buf = nullptr;
+	int param_size = 0;
+	
 	aResult.kind = PropNone;
 
-	name_end = StrChrAny(name, _T(".["));
-	if (name_end)
+	struct Invocation
 	{
-		c = *name_end;
-		*name_end = '\0'; // Temporarily terminate.
-	}
-	name_length = _tcslen(name);
+		Invocation *outer = nullptr;
+		ResultToken *leftval = nullptr;
+		IObject *invokee = nullptr;
+		LPWSTR name = nullptr;
+		int flags = 0, param_offset = 0;
+		WCHAR end_char = '\0';
+	} root_inv, *inv = &root_inv;
 
-	// Validate name for more accurate error-reporting.
-	if (name_length > MAX_VAR_NAME_LENGTH || !Var::ValidateName(name, DISPLAY_NO_ERROR))
+	// Property names that aren't valid identifiers can be set via .%% or DefineProp.
+	// Currently those aren't escaped in any way, so the following permits most characters,
+	// and even the empty string.  The <base> and <enum> sections rely on this permitting <>.
+	constexpr auto TERMINATORS = L".,[]()";
+
+	for (;;)
 	{
-		if (!_tcsicmp(name, _T("<exception>")))
+		if (temp_count == temp_size)
 		{
-			if (!mThrownToken)
-				return DEBUGGER_E_UNKNOWN_PROPERTY;
-			aResult.kind = PropValue;
-			aResult.value.CopyValueFrom(*mThrownToken);
-			if (aResult.value.symbol == SYM_OBJECT)
-				aResult.value.object->AddRef();
-			if (!name_end)
+			auto new_size = temp_size ? temp_size * 2 : 64;
+			auto new_temp = (ResultToken**)realloc(temp, new_size * sizeof(ResultToken*));
+			if (!new_temp)
 			{
-				// `property_get -n <exception>` is our non-standard way to retrieve the thrown value during an exception break.
-				// `property_set -n <exception> --` is our non-standard way to "clear the exception" (suppress the error dialog).
-				if (aSetValue)
-				{
-					if (!TokenIsEmptyString(*aSetValue))
-						return DEBUGGER_E_INVALID_OPTIONS;
-					mThrownToken = nullptr;
-				}
-				return DEBUGGER_E_OK;
+				err = DEBUGGER_E_INTERNAL_ERROR;
+				break;
 			}
+			temp = new_temp;
+			temp_size = new_size;
 		}
-		else
-			return DEBUGGER_E_INVALID_OPTIONS;
+		auto &lastval = *(temp[temp_count++] = new (_alloca(sizeof(ResultToken))) ResultToken());
+		lastval.InitResult(aResult.value.buf);
+		continue_with_same_lastval:
+
+		c = *cp;
+		if (!c) // Checked after continue_with_same_lastval to avoid returning "" in some cases, such as `1,`
+		{
+			err = DEBUGGER_E_INVALID_OPTIONS;
+			break;
+		}
+		if (!inv->leftval)
+		{
+			Var *var = nullptr;
+			VarBkp *varbkp = nullptr;
+
+			if (!_tcsnicmp(cp, _T("<exception>"), 11))
+			{
+				if (!mThrownToken)
+				{
+					err = DEBUGGER_E_UNKNOWN_PROPERTY;
+					break;
+				}
+				cp += 11;
+				if (!*cp)
+				{
+					// `property_get -n <exception>` is our non-standard way to retrieve the thrown value during an exception break.
+					// `property_set -n <exception> --` is our non-standard way to "clear the exception" (suppress the error dialog).
+					if (aSetValue)
+					{
+						if (!TokenIsEmptyString(*aSetValue))
+						{
+							err = DEBUGGER_E_INVALID_OPTIONS;
+							break;
+						}
+						mThrownToken = nullptr;
+						break;
+					}
+				}
+				lastval.CopyValueFrom(*mThrownToken);
+			}
+			else if (cp_end = ParsePropertyKeyLiteral(cp, lastval))
+			{
+				cp = cp_end;
+			}
+			else if (IS_IDENTIFIER_CHAR(*cp))
+			{
+				auto name = cp;
+				cp = find_identifier_end(cp + 1);
+				auto name_length = cp - name;
+				c = *cp;
+				*cp = '\0'; // Temporarily terminate.
+
+				VarList *vars = nullptr;
+				bool search_local = (aVarScope & VAR_LOCAL) && g->CurrentFunc;
+				if (search_local && aDepth > 0)
+				{
+					VarList *static_vars = nullptr;
+					VarBkp *bkps = nullptr, *bkps_end = nullptr;
+					mStack.GetLocalVars(aDepth, vars, static_vars, bkps, bkps_end);
+					for (; bkps < bkps_end; ++bkps)
+						if (!_tcsicmp(bkps->mVar->mName, name))
+						{
+							varbkp = bkps;
+							break;
+						}
+					if (!varbkp && static_vars)
+						var = static_vars->Find(name);
+					// If a var wasn't found above, make sure not to return a local var of the wrong function or depth.
+					if (!var)
+						aVarScope = FINDVAR_GLOBAL;
+				}
+
+				if (!var && !varbkp)
+				{
+					int insert_pos;
+					if (vars) // Use this first to support aDepth.
+						var = vars->Find(name, &insert_pos);
+					if (!var) // Use FindVar to support built-ins and globals.
+						var = g_script.FindVar(name, name_length, aVarScope, &vars, &insert_pos);
+					if (!var && aSetValue) // Avoid creating empty variables.
+						var = g_script.AddVar(name, name_length, vars, insert_pos
+							, search_local ? VAR_LOCAL : VAR_GLOBAL);
+				}
+
+				*cp = c; // Undo temporary termination.
+
+				if (!var && !varbkp)
+				{
+					err = DEBUGGER_E_UNKNOWN_PROPERTY;
+					break;
+				}
+
+				if (!c)
+				{
+					// Just a variable name.
+					if (var)
+						aResult.var = var, aResult.kind = PropVar;
+					else
+						aResult.bkp = varbkp, aResult.kind = PropVarBkp;
+					break;
+				}
+				if (varbkp && varbkp->mType == VAR_ALIAS)
+					var = varbkp->mAliasFor;
+				if (var)
+				{
+					if (err = GetPropertyValue(*var, lastval))
+						break;
+				}
+				else
+				{
+					varbkp->ToToken(lastval);
+				}
+			}
+			else if (inv->outer && (c == ',' || c == inv->end_char))
+			{
+				// Missing parameter or empty parameter list.
+				lastval.symbol = SYM_MISSING;
+			}
+			else
+				break; // Syntax error; err will be set due to *cp != 0.
+
+			if (lastval.symbol == SYM_OBJECT && !var) // AddRef() was called only if var != nullptr.
+				lastval.object->AddRef();
+
+			c = *cp;
+			if (!c)
+				break; // lastval is the final result, in temp[temp_count-1].
+			if (lastval.symbol == SYM_MISSING && !(c == ',' || c == inv->end_char))
+			{
+				err = DEBUGGER_E_UNKNOWN_PROPERTY;
+				break;
+			}
+			inv->leftval = &lastval;
+			continue; // inv->leftval is a parameter or left-hand side of an invocation.
+		}
+		// Now inv->leftval has been set up with a value, and lastval is available to place a result into.
+
+		if (!inv->invokee) // Initialize for a potential invocation.
+			if (inv->leftval->symbol == SYM_OBJECT)
+			{
+				inv->invokee = inv->leftval->object;
+				inv->flags = 0;
+			}
+			else
+			{
+				inv->invokee = Object::ValueBase(*inv->leftval);
+				inv->flags = IF_SUBSTITUTE_THIS;
+			}
+		ASSERT(inv->invokee || inv->leftval->symbol == SYM_MISSING && (c == ',' || c == inv->end_char));
+
+		for (c = *cp; c == '.'; cp = cp_end)
+		{
+			for (cp_end = ++cp; !_tcschr(TERMINATORS, c = *cp_end); ++cp_end);
+			*cp_end = '\0';
+
+			if (!_tcsicmp(cp, _T("<base>"))) // Debugger pseudo-property.
+			{
+				// x.<base> returns the base of x, but x.<base>.y invokes the version of y defined
+				// by x.<base> but with `this` set to x (for property getters or methods).
+				if (inv->flags != IF_SUBSTITUTE_THIS) // i.e. it's not already *implicitly* the value's base.
+					inv->invokee = inv->invokee->Base();
+				if (!inv->invokee) // Any.Prototype.<base> (potentially with a suffix)
+				{
+					err = DEBUGGER_E_UNKNOWN_PROPERTY;
+					goto break_outer;
+				}
+				inv->flags = IF_SUPER;
+			}
+			else if (!_tcsicmp(cp, _T("<enum>"))) // Debugger pseudo-property.
+			{
+				// x.<enum>[1] invokes x[1], but caller knows to enumerate items when aResult.kind == PropEnum.
+				if (!c)
+					aResult.kind = PropEnum;
+			}
+			else
+			{
+				ASSERT(!inv->name);
+				inv->name = cp;
+				cp = cp_end;
+				break; // Break inner loop to invoke this property below.
+			}
+		} // for()
+		// Due to potential null-termination of a property name above, must now use c instead of *cp.
+		
+		if (c == '[' && (cp[1] != ']' || !inv->name) || c == '(')
+		{
+			if (c == '(')
+				inv->flags |= IT_CALL;
+			auto new_inv = new (_alloca(sizeof(Invocation))) Invocation();
+			new_inv->end_char = c == '(' ? ')' : ']';
+			new_inv->param_offset = inv->param_offset;
+			new_inv->outer = inv;
+			inv = new_inv;
+			cp++;
+			goto continue_with_same_lastval;
+		}
+
+		ExprTokenType **param = nullptr;
+		int param_count = 0;
+
+		if (!inv->name)
+		{
+			// name is null and '[' and '(' are not present, therefore inv->leftval is not being invoked.
+			if (!c)
+			{
+				--temp_count;
+				ASSERT(temp[temp_count-1] == inv->leftval);
+				break; // inv->leftval is the final result (lastval wasn't needed).
+			}
+			// leftval should be a parameter.
+			
+			if (inv->param_offset + 1 >= param_size) // +1 for aSetValue
+			{
+				auto new_size = param_size ? param_size * 2 : 64;
+				auto new_buf = (ExprTokenType**)realloc(param_buf, new_size * sizeof(ExprTokenType*));
+				if (!new_buf)
+				{
+					err = DEBUGGER_E_INTERNAL_ERROR;
+					break;
+				}
+				param_buf = new_buf;
+				param_size = new_size;
+			}
+			param_buf[inv->param_offset++] = inv->leftval;
+
+			if (c == ',')
+			{
+				cp++;
+				inv->leftval = nullptr;
+				inv->invokee = nullptr;
+				inv->flags = 0;
+				goto continue_with_same_lastval;
+			}
+
+			if (inv->end_char != c)
+				break; // Syntax error.
+			
+			param = param_buf + inv->outer->param_offset;
+			param_count = inv->param_offset - inv->outer->param_offset;
+			while (param_count && param[param_count-1]->symbol == SYM_MISSING)
+				--param_count;
+			inv = inv->outer;
+			cp_end = ++cp; // Set things up to continue parsing after the end char.
+			c = *cp;
+		}
+		
+		// Prepare parameters for invocation.
+		ExprTokenType *value_to_set = !c ? aSetValue : NULL;
+		if (value_to_set)
+		{
+			if ((inv->flags & IT_BITMASK) == IT_CALL)
+			{
+				err = DEBUGGER_E_INVALID_OPTIONS;
+				break;
+			}
+			if (param)
+				param[param_count] = aSetValue;
+			else
+				param = &aSetValue;
+			param_count++;
+			inv->flags |= IT_SET;
+		}
+
+		// Attempt to invoke property.
+		auto result = inv->invokee->Invoke(lastval, inv->flags, inv->name, *inv->leftval, param, param_count);
+
+		if (lastval.symbol == SYM_STRING && !lastval.mem_to_free)
+		{
+			// Make a copy of the string since it could otherwise be deleted as a side-effect
+			// of a subsequent Invoke or Release call, or be overwritten if in prop.buf.
+			if (!lastval.Malloc(lastval.marker, lastval.marker_length))
+				result = FAIL;
+		}
+
+		if (result != OK) // FAIL, INVOKE_NOT_HANDLED or EARLY_EXIT
+		{
+			err = result == INVOKE_NOT_HANDLED ? DEBUGGER_E_UNKNOWN_PROPERTY : DEBUGGER_E_EVAL_FAIL;
+			break;
+		}
+		inv->invokee = nullptr;
+		if (!c)
+			break;
+		inv->leftval = &lastval;
+		inv->name = nullptr;
+		inv->flags = 0;
+		ASSERT(cp == cp_end && (*cp == c || !*cp));
+		*cp = c; // Potentially undo temporary termination.
+	}
+	break_outer:
+	
+	if (!err && (*cp || inv->outer || !temp_count))
+		err = DEBUGGER_E_INVALID_OPTIONS;
+
+	if (!err && !aSetValue && (!aResult.kind || aResult.kind == PropEnum))
+	{
+		// temp[--temp_count] is used in preference to inv->leftval, which should have the same value,
+		// because we also want to "remove" it from the array so that it won't be deleted below.
+		auto &ret = *temp[--temp_count];
+		if (!aResult.kind)
+			aResult.kind = PropValue;
+		aResult.invokee = inv->invokee;
+		aResult.value.CopyValueFrom(ret);
+		aResult.value.mem_to_free = ret.mem_to_free;
+	}
+	
+	while (temp_count)
+		temp[--temp_count]->Free();
+	free(temp);
+	free(param_buf);
+	return err;
+}
+
+LPWSTR Debugger::ParsePropertyKeyLiteral(LPWSTR src, ExprTokenType &t_key)
+{
+	if (*src == '"')
+	{
+		// Quoted string which may contain any character.
+		t_key.symbol = SYM_STRING;
+		t_key.marker = ++src;
+		// Replace "" with " in-place and find end of string:
+		WCHAR *dst;
+		for (dst = src; WCHAR c = *src; ++src)
+		{
+			if (c == '"')
+			{
+				// Quote mark; but is it a literal quote mark?
+				if (*++src != '"') // This currently doesn't match up with expression syntax, but is left this way for simplicity.
+					// Nope.
+					break;
+				//else above skipped the second quote mark, so fall through:
+			}
+			*dst++ = c;
+		}
+		*dst = '\0';
+		t_key.marker_length = dst - t_key.marker;
+		return src;
+	}
+	else if (!_tcsnicmp(src, _T("Object("), 7) && cisdigit(src[7]))
+	{
+		// Object(n) where n is the address of a key object, as a literal signed integer.
+		t_key.value_int64 = istrtoi64(src + 7, &src);
+		if (*src != ')')
+			return nullptr;
+		t_key.symbol = SYM_OBJECT;
+		return src + 1;
 	}
 	else
 	{
-		VarList *vars = nullptr;
-		bool search_local = (aVarScope & VAR_LOCAL) && g->CurrentFunc;
-		if (search_local && aDepth > 0)
+		LPTSTR iend, fend;
+		auto ival = istrtoi64(src, &iend);
+		auto fval = _tcstod(src, &fend);
+		if (fend > iend)
 		{
-			VarList *static_vars = nullptr;
-			VarBkp *bkps = nullptr, *bkps_end = nullptr;
-			mStack.GetLocalVars(aDepth, vars, static_vars, bkps, bkps_end);
-			for ( ; bkps < bkps_end; ++bkps)
-				if (!_tcsicmp(bkps->mVar->mName, name))
-				{
-					varbkp = bkps;
-					break;
-				}
-			if (!varbkp && static_vars)
-				var = static_vars->Find(name);
-			// If a var wasn't found above, make sure not to return a local var of the wrong function or depth.
-			if (!var)
-				aVarScope = FINDVAR_GLOBAL;
+			t_key.SetValue(fval);
+			return fend;
 		}
-
-		if (!var && !varbkp)
+		else if (iend > src)
 		{
-			int insert_pos;
-			if (vars) // Use this first to support aDepth.
-				var = vars->Find(name, &insert_pos);
-			if (!var) // Use FindVar to support built-ins and globals.
-				var = g_script.FindVar(name, name_length, aVarScope, &vars, &insert_pos);
-			if (!var && aSetValue) // Avoid creating empty variables.
-				var = g_script.AddVar(name, name_length, vars, insert_pos
-					, search_local ? VAR_LOCAL : VAR_GLOBAL);
-		}
-
-		if (!var && !varbkp)
-			return DEBUGGER_E_UNKNOWN_PROPERTY;
-
-		if (!name_end)
-		{
-			// Just a variable name.
-			if (var)
-				aResult.var = var, aResult.kind = PropVar;
-			else
-				aResult.bkp = varbkp, aResult.kind = PropVarBkp;
-			return DEBUGGER_E_OK;
-		}
-		if (varbkp && varbkp->mType == VAR_ALIAS)
-			var = varbkp->mAliasFor;
-		if (var)
-		{
-			auto error = GetPropertyValue(*var, aResult); // Supports built-in vars.
-			if (error)
-				return error;
-		}
-		else
-		{
-			varbkp->ToToken(aResult.value);
-			if (aResult.value.symbol == SYM_OBJECT)
-				aResult.value.object->AddRef();
+			t_key.SetValue(ival);
+			return iend;
 		}
 	}
-	
-	if (aResult.value.symbol == SYM_MISSING)
-		return DEBUGGER_E_UNKNOWN_PROPERTY;
-
-	IObject *this_obj;
-	int invoke_flags;
-
-	// aFullName contains a '.' or '['.  Although it looks like an expression, the IDE should
-	// only pass a property name which we gave it in response to a previous command, so we
-	// only need to support the subset of expression syntax used by WriteObjectPropertyXml().
-	for (;;)
-	{
-		this_obj = aResult.value.symbol == SYM_OBJECT ? aResult.value.object : Object::ValueBase(aResult.value);
-		invoke_flags = aResult.value.symbol == SYM_OBJECT ? 0 : IF_SUBSTITUTE_THIS;
-		ASSERT(this_obj);
-
-	continue_same_this_obj:
-		*name_end = c; // Undo termination (if it was terminated at this position).
-		if (c == '.')
-		{
-			name = name_end + 1;
-			// For simplicity, let this be any string terminated by '.' or '['.
-			// Actual expressions require it to contain only alphanumeric chars and/or '_'.
-			name_end = StrChrAny(name, _T(".[")); // This also sets it up for the next iteration.
-			if (name_end)
-			{
-				c = *name_end; // Save this for the next iteration.
-				*name_end = '\0';
-			}
-			else
-				c = 0; // Indicate there won't be a next iteration.
-		}
-		else
-			name = nullptr; // __Item[] or invalid.
-
-		ExprTokenType t_key;
-		t_key.symbol = SYM_MISSING;
-		if (c == '[' && !(name && *name == '<')) // <base> and <enum> aren't actual properties, so don't accept parameters.
-		{
-			src = name_end + 1;
-			if (*src == '"')
-			{
-				// Quoted string which may contain any character.
-				t_key.symbol = SYM_STRING;
-				t_key.marker = ++src;
-				// Replace "" with " in-place and find end of string:
-				for (dst = src; c = *src; ++src)
-				{
-					if (c == '"')
-					{
-						// Quote mark; but is it a literal quote mark?
-						if (*++src != '"') // This currently doesn't match up with expression syntax, but is left this way for simplicity.
-							// Nope.
-							break;
-						//else above skipped the second quote mark, so fall through:
-					}
-					*dst++ = c;
-				}
-				if (*src != ']')
-					return DEBUGGER_E_INVALID_OPTIONS;
-				t_key.marker_length = dst - t_key.marker;
-				*dst = '\0'; // Only after the check above, since src might be == dst.
-				name_end = src + 1; // Set it up for the next iteration.
-			}
-			else if (!_tcsnicmp(src, _T("Object("), 7))
-			{
-				// Object(n) where n is the address of a key object, as a literal signed integer.
-				t_key.symbol = SYM_OBJECT;
-				src += 7;
-				name_end = _tcschr(src, ')');
-				if (!name_end || name_end[1] != ']')
-					return DEBUGGER_E_INVALID_OPTIONS;
-				*name_end = '\0';
-				name_end += 2; // Set it up for the next iteration.
-			}
-			else
-			{
-				// The only other valid form is a literal signed integer.
-				t_key.symbol = SYM_INTEGER;
-				name_end = _tcschr(src, ']');
-				if (!name_end)
-					return DEBUGGER_E_INVALID_OPTIONS;
-				*name_end = '\0'; // Although not actually necessary for _ttoi(), seems best for maintainability.
-				++name_end; // Set it up for the next iteration.
-			}
-			if (t_key.symbol != SYM_STRING) // SYM_INTEGER or SYM_OBJECT
-				t_key.value_int64 = istrtoi64(src, nullptr);
-			c = *name_end; // Set for the next iteration.
-		}
-		else if (!name)
-			return DEBUGGER_E_INVALID_OPTIONS;
-
-		// IDE should request .<base> only if it was returned by property_get or context_get,
-		// so this always means the object's base.  By contrast, .base might invoke some other
-		// property (if overridden) and ["base"] should invoke __item.
-		if (name && !_tcsicmp(name, _T("<base>")))
-		{
-			if (invoke_flags != IF_SUBSTITUTE_THIS) // i.e. it's not already *implicitly* the value's base.
-				this_obj = this_obj->Base();
-			invoke_flags = IF_SUPER;
-			if (!this_obj) // Any.Prototype.<base>
-				return DEBUGGER_E_UNKNOWN_PROPERTY;
-			if (c) goto continue_same_this_obj;
-			// For property_set, this won't allow the base to be set (success="0").
-			// That seems okay since it could only ever be set to NULL anyway.
-			aResult.kind = PropValue;
-			aResult.invokee = this_obj;
-			return DEBUGGER_E_OK;
-		}
-		else if (name && !_tcsicmp(name, _T("<enum>")))
-		{
-			if (c) goto continue_same_this_obj; // Evaluate x.<enum>[1] as x[1]
-			aResult.kind = PropEnum;
-			aResult.invokee = this_obj;
-			return DEBUGGER_E_OK;
-		}
-
-		ResultToken t_this;
-		t_this.CopyValueFrom(aResult.value);
-		t_this.mem_to_free = aResult.value.mem_to_free;
-		aResult.value.InitResult(aResult.value.buf);
-
-		// Attempt to invoke property.
-		ExprTokenType *value_to_set = !c ? aSetValue : NULL;
-		ExprTokenType *param[2];
-		int param_count = 0;
-		if (t_key.symbol != SYM_MISSING)
-			param[param_count++] = &t_key;
-		if (value_to_set)
-		{
-			param[param_count++] = value_to_set;
-			invoke_flags |= IT_SET;
-		}
-		auto result = this_obj->Invoke(aResult.value, invoke_flags, name, t_this, param, param_count);
-
-		if (g->ThrownToken)
-			g_script.FreeExceptionToken(g->ThrownToken);
-
-		if (aResult.value.symbol == SYM_STRING && !aResult.value.mem_to_free && aResult.value.marker != aResult.value.buf)
-		{
-			// Before releasing the target object, make a copy of the string in case it points
-			// to memory contained by the target object, which might be deleted via Release().
-			if (!TokenSetResult(aResult.value, aResult.value.marker, aResult.value.marker_length))
-				result = FAIL;
-		}
-		t_this.Free();
-		
-		if (result == INVOKE_NOT_HANDLED)
-			return DEBUGGER_E_UNKNOWN_PROPERTY;
-		if (!result)
-			return DEBUGGER_E_EVAL_FAIL;
-		if (!c)
-		{
-			if (!value_to_set)
-				aResult.kind = PropValue;
-			return DEBUGGER_E_OK;
-		}
-	}
+	return nullptr;
 }
 
 

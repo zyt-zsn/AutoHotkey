@@ -350,10 +350,9 @@ private:
 
 	struct PropertySource
 	{
-		PropertyType kind;
+		PropertyType kind = PropNone;
 		Var *var;
 		VarBkp *bkp;
-		Object::Variant *field;
 		ResultToken value;
 		IObject *invokee = nullptr;
 		PropertySource(LPTSTR aResultBuf)
@@ -436,7 +435,7 @@ private:
 	int GetPropertyInfo(Var &aVar, PropertyInfo &aProp);
 	int GetPropertyInfo(VarBkp &aBkp, PropertyInfo &aProp);
 	
-	int GetPropertyValue(Var &aVar, PropertySource &aProp);
+	int GetPropertyValue(Var &aVar, ResultToken &aValue);
 
 	int WritePropertyXml(PropertyInfo &aProp);
 	int WritePropertyXml(PropertyInfo &aProp, LPTSTR aName);
@@ -447,7 +446,10 @@ private:
 
 	int WriteEnumItems(PropertyInfo &aProp);
 
+	LPWSTR ParsePropertyKeyLiteral(LPWSTR aPtr, ExprTokenType &aKey);
 	int ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, ExprTokenType *aSetValue
+		, PropertySource &aResult);
+	int ParsePropertyName(LPWSTR aNamePtr, int aDepth, int aVarScope, ExprTokenType *aSetValue
 		, PropertySource &aResult);
 	int property_get_or_value(char **aArgV, int aArgCount, char *aTransactionId, bool aIsPropertyGet);
 	int redirect_std(char **aArgV, int aArgCount, char *aTransactionId, char *aCommandName);
