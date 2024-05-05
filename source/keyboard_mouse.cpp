@@ -1848,6 +1848,7 @@ BIF_DECL(BIF_Click)
 		sntprintfcat(args, _countof(args), _T("%s,"), arg);
 	}
 	PerformClick(args);
+	_f_return_empty;
 }
 
 
