@@ -333,7 +333,7 @@ private:
 	int mContinuationDepth = 0; // Stack depth at last continuation command, for step_into/step_over.
 	CStringA mContinuationTransactionId {""}; // transaction_id of last continuation command.
 
-	int mMaxPropertyData = 1024, mMaxChildren = 20, mMaxDepth = 2;
+	int mMaxPropertyData = 1024, mMaxChildren = 1000, mMaxDepth = 1;
 
 	HookType mDisabledHooks = 0;
 	bool mProcessingCommands;
