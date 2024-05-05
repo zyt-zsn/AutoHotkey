@@ -2229,9 +2229,7 @@ void Object::Variant::ReturnRef(ResultToken &result)
 		object->AddRef();
 		result.object = object;
 		break;
-	case SYM_MISSING:
-		result.SetValue(_T(""), 0);
-		break;
+	//case SYM_MISSING: // Callers don't need special handling for this.
 	//case SYM_INTEGER:
 	//case SYM_FLOAT:
 	default:
@@ -2256,10 +2254,10 @@ void Object::Variant::ReturnMove(ResultToken &result)
 		Minit(); // Let item forget the object ref since we are taking ownership.
 		break;
 	case SYM_MISSING:
+		// This implements "blank if none" documented for some methods in v2.0.
+		// TODO: v2.1/future mode: return unset
 	case SYM_DYNAMIC:
-	case SYM_TYPED_FIELD:
-		// Since functons currently aren't permitted to return unset, these cases return ""
-		// (as documented for RemoveAt, Delete, etc.).
+	case SYM_TYPED_FIELD: // This is a field definition; it can't have a value.
 		result.SetValue(_T(""), 0);
 		break;
 	//case SYM_INTEGER:
@@ -2280,8 +2278,8 @@ void Object::Variant::ToToken(ExprTokenType &aToken)
 		break;
 	case SYM_DYNAMIC:
 	case SYM_TYPED_FIELD:
-		ASSERT(!"These cases should not be reached");
-		aToken.SetValue(_T(""), 0);
+		// This can be reached via Object::GetOwnProp.
+		aToken.symbol = SYM_INVALID; // Allow caller to detect this as an error.
 		break;
 	default:
 		aToken.value_int64 = n_int64; // Union copy.

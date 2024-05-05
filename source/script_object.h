@@ -458,7 +458,7 @@ public:
 		field->ToToken(aToken);
 		return true;
 	}
-	
+
 	IObject *GetOwnPropObj(name_t aName)
 	{
 		auto field = FindField(aName);
