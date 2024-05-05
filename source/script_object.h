@@ -579,6 +579,7 @@ public:
 
 	enum { M_Error__New, M_OSError__New };
 	void Error__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void Error_Show(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	// For pseudo-objects:
 	static Object *sAnyPrototype, *sPrimitivePrototype, *sStringPrototype

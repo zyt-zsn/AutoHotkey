@@ -3612,7 +3612,8 @@ ObjectMember RegExMatchObject::sMembers[] =
 
 ObjectMember Object::sErrorMembers[]
 {
-	Object_Member(__New, Error__New, M_Error__New, IT_CALL, 0, 3)
+	Object_Member(__New, Error__New, M_Error__New, IT_CALL, 0, 3),
+	Object_Member(Show, Error_Show, 0, IT_CALL, 0, 2),
 };
 
 ObjectMember Object::sOSErrorMembers[]

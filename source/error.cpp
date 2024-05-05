@@ -325,7 +325,7 @@ struct ErrorBoxParam
 	ResultType type;
 	LPCTSTR info;
 	Line *line;
-	IObject *obj;
+	Object *obj;
 #ifdef CONFIG_DEBUGGER
 	int stack_index;
 #endif
@@ -507,25 +507,57 @@ void InitErrorBox(HWND hwnd, ErrorBoxParam &error)
 	}
 	else
 	{
-		sntprintf(buf, _countof(buf), _T("Line:\t%d\nFile:\t"), g_script.CurrentLine());
-		SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)buf);
-		cf.dwMask = CFM_LINK;
-		cf.dwEffects = CFE_LINK; // Mark it as a link.
-		SendMessage(re, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&cf);
-		SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)g_script.CurrentFile());
-		SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)_T("\n\n"));
+		LPCTSTR file = nullptr;
+		LineNumberType line = 0;
+		if (error.obj)
+		{
+			ExprTokenType t;
+			if (error.obj->GetOwnProp(t, _T("File")))
+				file = TokenToString(t);
+			if (error.obj->GetOwnProp(t, _T("Line")))
+				line = (LineNumberType)TokenToInt64(t);
+		}
+		else
+		{
+			file = g_script.CurrentFile();
+			line = g_script.CurrentLine();
+		}
+		if (file && *file)
+		{
+			sntprintf(buf, _countof(buf), line ? _T("Line:\t%d\nFile:\t") : _T("File: "), line);
+			SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)buf);
+			cf.dwMask = CFM_LINK;
+			cf.dwEffects = CFE_LINK; // Mark it as a link.
+			SendMessage(re, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&cf);
+			SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)file);
+			SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)_T("\n\n"));
+		}
 	}
 
-	LPCTSTR footer;
-	switch (error.type)
+	LPCTSTR footer = nullptr;
+	if (error.obj)
 	{
-	case WARN: footer = ERR_WARNING_FOOTER; break;
-	case FAIL_OR_OK: footer = nullptr; break;
-	case CRITICAL_ERROR: footer = UNSTABLE_WILL_EXIT; break;
-	default: footer = (g->ExcptMode & EXCPTMODE_DELETE) ? ERR_ABORT_DELETE
-		: g_script.mIsReadyToExecute ? ERR_ABORT_NO_SPACES
-		: g_script.mIsRestart ? OLD_STILL_IN_EFFECT
-		: WILL_EXIT;
+		ExprTokenType t;
+		if (error.obj->GetOwnProp(t, _T("Hint")))
+			footer = TokenToString(t, buf);
+	}
+	if (footer) // Footer was specified.
+	{
+		if (!*footer) // Explicitly blank: omit default footer.
+			footer = nullptr;
+	}
+	else // Use default footer for this error type, if any.
+	{
+		switch (error.type)
+		{
+		case WARN: footer = ERR_WARNING_FOOTER; break;
+		case FAIL_OR_OK: break;
+		case CRITICAL_ERROR: footer = UNSTABLE_WILL_EXIT; break;
+		default: footer = (g->ExcptMode & EXCPTMODE_DELETE) ? ERR_ABORT_DELETE
+			: g_script.mIsReadyToExecute ? ERR_ABORT_NO_SPACES
+			: g_script.mIsRestart ? OLD_STILL_IN_EFFECT
+			: WILL_EXIT;
+		}
 	}
 	if (footer)
 	{
@@ -688,22 +720,30 @@ INT_PTR CALLBACK ErrorBoxProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 }
 
 
-ResultType Script::ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo, Line *aLine, IObject *aException)
+__declspec(noinline)
+ResultType Script::ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo, Line *aLine)
+{
+	// This overload reduces code size vs. using optional parameters since the the latter
+	// works by the compiler implicitly inserting the default values in the compiled code.
+	return ShowError(aErrorText, aErrorType, aExtraInfo, aLine, nullptr);
+}
+
+
+ResultType Script::ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo, Line *aLine, Object *aException)
 {
 	if (!aErrorText)
 		aErrorText = _T("");
 	if (!aExtraInfo)
 		aExtraInfo = _T("");
-	if (!aLine)
-		aLine = mCurrLine;
 
 #ifdef CONFIG_DEBUGGER
 	if (g_Debugger.HasStdErrHook())
 	{
 		TCHAR buf[LINE_SIZE * 2];
+		Line *line = aLine ? aLine : mCurrLine;
 		FormatStdErr(buf, _countof(buf), aErrorText, aExtraInfo
-			, aLine ? aLine->mFileIndex : mCurrFileIndex
-			, aLine ? aLine->mLineNumber : mCombinedLineNumber
+			, line ? line->mFileIndex : mCurrFileIndex
+			, line ? line->mLineNumber : mCombinedLineNumber
 			, aErrorType == WARN);
 		g_Debugger.OutputStdErr(buf);
 	}
@@ -1095,11 +1135,9 @@ ResultType FResultToError(ResultToken &aResultToken, ExprTokenType *aParam[], in
 
 
 
+__declspec(noinline)
 ResultType Script::UnhandledException(Line* aLine, ResultType aErrorType)
 {
-	LPCTSTR message = _T(""), extra = _T("");
-	TCHAR extra_buf[MAX_NUMBER_SIZE], message_buf[MAX_NUMBER_SIZE];
-
 	global_struct &g = *::g;
 	
 	ResultToken *token = g.ThrownToken;
@@ -1151,7 +1189,24 @@ ResultType Script::UnhandledException(Line* aLine, ResultType aErrorType)
 	}
 #endif
 
-	if (Object *ex = dynamic_cast<Object *>(TokenToObject(*token)))
+	if (ShowError(aLine, aErrorType, token) == OK)
+	{
+		FreeExceptionToken(token);
+		return OK;
+	}
+	g.ThrownToken = token;
+	return FAIL;
+}
+
+
+
+ResultType Script::ShowError(Line* aLine, ResultType aErrorType, ExprTokenType *token)
+{
+	LPCTSTR message = _T(""), extra = _T("");
+	TCHAR extra_buf[MAX_NUMBER_SIZE], message_buf[MAX_NUMBER_SIZE];
+	
+	Object *ex = dynamic_cast<Object *>(TokenToObject(*token));
+	if (ex)
 	{
 		// For simplicity and safety, we call into the Object directly rather than via Invoke().
 		ExprTokenType t;
@@ -1159,28 +1214,26 @@ ResultType Script::UnhandledException(Line* aLine, ResultType aErrorType)
 			message = TokenToString(t, message_buf);
 		if (ex->GetOwnProp(t, _T("Extra")))
 			extra = TokenToString(t, extra_buf);
-		if (ex->GetOwnProp(t, _T("Line")))
+		LPCTSTR file;
+		LineNumberType line_no;
+		if (   ex->GetOwnProp(t, _T("File")) && *(file = TokenToString(t))
+			&& ex->GetOwnProp(t, _T("Line")) &&  (line_no = (LineNumberType)TokenToInt64(t))   )
 		{
-			LineNumberType line_no = (LineNumberType)TokenToInt64(t);
-			if (ex->GetOwnProp(t, _T("File")))
+			// Locate the line by number and file index, then display that line instead
+			// of the caller supplied one since it's probably more relevant.
+			int file_index;
+			for (file_index = 0; file_index < Line::sSourceFileCount; ++file_index)
+				if (!_tcsicmp(file, Line::sSourceFile[file_index]))
+					break;
+			if (!aLine || aLine->mFileIndex != file_index || aLine->mLineNumber != line_no) // Keep aLine if it matches, in case of multiple Lines with the same number.
 			{
-				LPCTSTR file = TokenToString(t);
-				// Locate the line by number and file index, then display that line instead
-				// of the caller supplied one since it's probably more relevant.
-				int file_index;
-				for (file_index = 0; file_index < Line::sSourceFileCount; ++file_index)
-					if (!_tcsicmp(file, Line::sSourceFile[file_index]))
-						break;
-				if (!aLine || aLine->mFileIndex != file_index || aLine->mLineNumber != line_no) // Keep aLine if it matches, in case of multiple Lines with the same number.
-				{
-					Line *line;
-					for (line = mFirstLine;
-						line && (line->mLineNumber != line_no || line->mFileIndex != file_index
-							|| !line->mArgc && line->mNextLine && line->mNextLine->mLineNumber == line_no); // Skip any same-line block-begin/end, try, else or finally.
-						line = line->mNextLine);
-					if (line)
-						aLine = line;
-				}
+				Line *line;
+				for (line = mFirstLine;
+					line && (line->mLineNumber != line_no || line->mFileIndex != file_index
+						|| !line->mArgc && line->mNextLine && line->mNextLine->mLineNumber == line_no); // Skip any same-line block-begin/end, try, else or finally.
+					line = line->mNextLine);
+				if (line)
+					aLine = line;
 			}
 		}
 	}
@@ -1194,13 +1247,33 @@ ResultType Script::UnhandledException(Line* aLine, ResultType aErrorType)
 	if (!*message)
 		message = _T("Unhandled exception.");
 
-	if (ShowError(message, aErrorType, extra, aLine, TokenToObject(*token)) == OK)
+	return ShowError(message, aErrorType, extra, aLine, ex);
+}
+
+
+
+void Object::Error_Show(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	ResultType type = FAIL_OR_OK;
+	if (aParamCount && aParam[0]->symbol != SYM_MISSING)
 	{
-		FreeExceptionToken(token);
-		return OK;
+		static LPCTSTR sKindName[] { _T("Return"), _T("Exit"), _T("ExitApp"), _T("Warn") };
+		static ResultType sKindType[] { FAIL_OR_OK, FAIL, CRITICAL_ERROR, WARN };
+		auto kind = TokenToString(*aParam[0]);
+		for (int i = 0;; ++i)
+		{
+			if (i == _countof(sKindName))
+				_f_throw_param(0);
+			if (!_tcsicmp(kind, sKindName[i]))
+			{
+				type = sKindType[i];
+				break;
+			}
+		}
 	}
-	g.ThrownToken = token;
-	return FAIL;
+
+	ExprTokenType t_this(this);
+	_o_return(g_script.ShowError(nullptr, type, &t_this) == OK ? -1 : 1);
 }
 
 
