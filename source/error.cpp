@@ -523,7 +523,7 @@ void InitErrorBox(HWND hwnd, ErrorBoxParam &error)
 	}
 #endif
 
-	SendMessage(re, EM_SETEVENTMASK, 0, ENM_REQUESTRESIZE | ENM_LINK);
+	SendMessage(re, EM_SETEVENTMASK, 0, ENM_REQUESTRESIZE | ENM_LINK | ENM_KEYEVENTS);
 	SendMessage(re, EM_REQUESTRESIZE, 0, 0);
 
 #ifndef AUTOHOTKEYSC
@@ -591,6 +591,14 @@ INT_PTR CALLBACK ErrorBoxProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			HWND re = ((NMHDR*)lParam)->hwndFrom;
 			switch (((NMHDR*)lParam)->code)
 			{
+			case EN_MSGFILTER:
+			{
+				auto mf = (MSGFILTER*)lParam;
+				if (mf->msg == WM_CHAR)
+					// Forward it to any of the buttons so the dialog will process it as a mnemonic.
+					PostMessage(GetDlgItem(hwnd, IDCANCEL), mf->msg, mf->wParam, mf->lParam);
+				break;
+			}
 			case EN_REQUESTRESIZE: // Received when the RichEdit's content grows beyond its capacity to display all at once.
 			{
 				RECT &rcNew = ((REQRESIZE*)lParam)->rc;
