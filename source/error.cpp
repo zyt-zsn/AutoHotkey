@@ -443,24 +443,37 @@ void InitErrorBox(HWND hwnd, ErrorBoxParam &error)
 	cf.dwEffects = 0;
 	SendMessage(re, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&cf);
 	
-	sntprintf(buf, _countof(buf), _T("%s: %.500s\n\n")
+	sntprintf(buf, _countof(buf), _T("%s: %.500s\n")
 		, error.type == CRITICAL_ERROR ? _T("Critical Error")
 			: error.type == WARN ? _T("Warning") : _T("Error")
 		, error.text);
-	SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)buf);
+	auto cp = _tcschr(buf, '\n');
+	if (auto c = *++cp) // Multiple lines in error.text.
+	{
+		// Insert a break *after* the \n so that formatting will revert to default afterward.
+		*cp = '\0';
+		SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)buf);
+		*cp = c;
+	}
+	else
+		cp = buf;
+	SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)cp);
 	
+	bool file_needs_break = true;
 	if (error.info && *error.info)
 	{
 		UINT suffix = _tcslen(error.info) > 80 ? 8230 : 0;
-		if (error.line)
-			sntprintf(buf, _countof(buf), _T("Specifically: %.80s%s\n\n"), error.info, &suffix);
+		if (file_needs_break = error.line || error.obj)
+			sntprintf(buf, _countof(buf), _T("\nSpecifically: %.80s%s\n"), error.info, &suffix);
 		else
-			sntprintf(buf, _countof(buf), _T("Text:\t%.80s%s\n"), error.info, &suffix);
+			sntprintf(buf, _countof(buf), _T("\nText:\t%.80s%s\n"), error.info, &suffix);
 		SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)buf);
 	}
 
 	if (error.line)
 	{
+		SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)_T("\n"));
+
 		#define LINES_ABOVE_AND_BELOW 2
 
 		// Determine the range of lines to be shown:
@@ -520,13 +533,13 @@ void InitErrorBox(HWND hwnd, ErrorBoxParam &error)
 		}
 		if (file && *file)
 		{
-			sntprintf(buf, _countof(buf), line ? _T("Line:\t%d\nFile:\t") : _T("File: "), line);
-			SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)buf);
+			sntprintf(buf, _countof(buf), line ? _T("\nLine:\t%d\nFile:\t") : _T("\nFile: "), line);
+			SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)(buf + !file_needs_break));
 			cf.dwMask = CFM_LINK;
 			cf.dwEffects = CFE_LINK; // Mark it as a link.
 			SendMessage(re, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&cf);
 			SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)file);
-			SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)_T("\n\n"));
+			SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)_T("\n"));
 		}
 	}
 
@@ -551,8 +564,7 @@ void InitErrorBox(HWND hwnd, ErrorBoxParam &error)
 	}
 	if (footer)
 	{
-		if (error.line)
-			SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)_T("\n"));
+		SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)_T("\n"));
 		SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)footer);
 	}
 
