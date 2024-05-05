@@ -2704,7 +2704,7 @@ bool CollectHotstring(KBDLLHOOKSTRUCT &aEvent, TCHAR ch[], int char_count, HWND 
 				}
 			}
 
-			if (hs.mDoBackspace || hs.mOmitEndChar) // Fix for v1.0.37.07: Added hs.mOmitEndChar so that B0+O will omit the ending character.
+			if (hs.mDoBackspace || hs.mOmitEndChar && hs.mEndCharRequired)
 			{
 				// Have caller suppress this final key pressed by the user, since it would have
 				// to be backspaced over anyway.  Even if there is a visible Input command in
