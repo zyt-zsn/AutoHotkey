@@ -1831,7 +1831,7 @@ int Debugger::property_get_or_value(char **aArgV, int aArgCount, char *aTransact
 	// It seems best to allow context id zero to retrieve either a local or global,
 	// rather than requiring the IDE to check each context when looking up a variable.
 	//case PC_Local:	always_use = FINDVAR_LOCAL; break;
-	case PC_Local:	always_use = FINDVAR_DEFAULT; break;
+	case PC_Local:	always_use = FINDVAR_FOR_READ; break;
 	case PC_Global:	always_use = FINDVAR_GLOBAL; break;
 	default:
 		return DEBUGGER_E_INVALID_CONTEXT;
