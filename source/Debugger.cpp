@@ -1134,6 +1134,8 @@ int Debugger::GetPropertyInfo(Var &aVar, PropertyInfo &aProp)
 	aProp.is_alias = aVar.mType == VAR_ALIAS;
 	aProp.is_static = aVar.IsStatic();
 	aProp.is_builtin = aVar.mType == VAR_VIRTUAL;
+	aProp.kind = PropValue;
+	aProp.invokee = nullptr;
 	return GetPropertyValue(aVar, aProp.value);
 }
 
