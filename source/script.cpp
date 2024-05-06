@@ -2047,8 +2047,14 @@ process_completed_line:
 						return FAIL;
 					if (IsFunctionDefinition(buf, next_buf)) // x::y(ThisHotkey){
 						goto process_completed_line;
+					auto open_block = mLineParent;
 					if (!ParseAndAddLineInBlock(buf)) // Function body - one line
 						return FAIL;
+					if (open_block != mLineParent) // key::try { or similar.
+					{
+						mCurrLine = nullptr;
+						return ScriptError(ERR_HOTKEY_MISSING_BRACE);
+					}
 				}
 			}
 			goto continue_main_loop; // In lieu of "continue", for performance.
