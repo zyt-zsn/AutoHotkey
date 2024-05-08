@@ -2896,10 +2896,6 @@ private:
 	ResultType AddLabel(LPTSTR aLabelName, bool aAllowDupe);
 	ResultType AddLine(ActionTypeType aActionType, LPTSTR aArg[] = NULL, int aArgc = 0, bool aAllArgsAreExpressions = false);
 
-	// These aren't in the Line class because I think they're easier to implement
-	// if aStartingLine is allowed to be NULL (for recursive calls).  If they
-	// were member functions of class Line, a check for NULL would have to
-	// be done before dereferencing any line's mNextLine, for example:
 	ResultType PreparseExpressions(Line *aStartingLine);
 	ResultType PreparseExpressions(FuncList &aFuncs);
 	void PreparseHotkeyIfExpr(Line *aLine);
