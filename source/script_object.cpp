@@ -6,6 +6,7 @@
 
 #include "script_object.h"
 #include "script_func_impl.h"
+#include "script_gui.h"
 #include "input_object.h"
 
 #include <errno.h> // For ERANGE.

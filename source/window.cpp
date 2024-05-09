@@ -20,6 +20,7 @@ GNU General Public License for more details.
 #include "application.h" // for MsgSleep()
 #include "psapi.h" // for ahk_exe
 #include <dwmapi.h>
+#include "script_gui.h"
 
 
 HWND WinActivate(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText

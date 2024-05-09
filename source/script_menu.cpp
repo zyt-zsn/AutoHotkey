@@ -20,6 +20,7 @@ GNU General Public License for more details.
 #include "application.h" // for MsgSleep()
 #include "window.h" // for SetForegroundWindowEx()
 #include "script_func_impl.h"
+#include "script_gui.h"
 
 
 
