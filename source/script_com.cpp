@@ -4,6 +4,7 @@
 #include "script_object.h"
 #include "script_com.h"
 #include "script_func_impl.h"
+#include "script_gui.h"
 #include <DispEx.h>
 
 

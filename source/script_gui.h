@@ -14,10 +14,10 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 */
 
-#ifndef script_h
-#define script_h
+#pragma once
 
 #include "stdafx.h" // pre-compiled headers
+#include "script.h"
 
 
 #define GUI_INDEX_TO_ID(index) (index + CONTROL_ID_FIRST)
