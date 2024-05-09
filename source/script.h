@@ -254,15 +254,6 @@ struct InputBoxType
 	ResultType UpdateResult(HWND hControl);
 };
 
-// From AutoIt3's InputBox.  This doesn't add a measurable amount of code size, so the compiler seems to implement
-// it efficiently (somewhat like a macro).
-template <class T>
-inline void swap(T &v1, T &v2) {
-	T tmp=v1;
-	v1=v2;
-	v2=tmp;
-}
-
 // The following functions are used in GUI DPI scaling, so that
 // GUIs designed for a 96 DPI setting (i.e. using absolute coords
 // or explicit widths/sizes) can continue to run with mostly no issues.
