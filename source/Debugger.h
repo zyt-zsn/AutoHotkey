@@ -87,14 +87,16 @@ class Breakpoint
 public:
 	int id;
 	char type;
-	char state;
-	bool temporary;
-	
-	// Not yet supported: function, hit_count, hit_value, hit_condition, exception
+	char state = BS_Disabled;
+	bool temporary = false;
 
-	Breakpoint() : id(AllocateID()), type(BT_Line), state(BS_Enabled), temporary(false)
-	{
-	}
+	Line *line = nullptr;
+	Breakpoint *next = nullptr;
+	
+	// Not yet supported: function, hit_count, hit_value, hit_condition
+
+	Breakpoint(BreakpointTypeType aType = BT_Line, int aID = AllocateID())
+		: id(aID), type((char)aType) {}
 
 	static int AllocateID() { return ++sMaxId; }
 
@@ -193,7 +195,7 @@ public:
 	inline bool IsAtBreak() { return mProcessingCommands; }
 	inline bool HasStdErrHook() { return mStdErrMode != SR_Disabled; }
 	inline bool HasStdOutHook() { return mStdOutMode != SR_Disabled; }
-	inline bool BreakOnExceptionIsEnabled() { return mBreakOnException; }
+	inline bool BreakOnExceptionIsEnabled() { return mBreakOnException.state == BS_Enabled; }
 
 	LPCTSTR WhatThrew();
 
@@ -284,8 +286,10 @@ private:
 	SOCKET mSocket = INVALID_SOCKET;
 	Line *mCurrLine = nullptr; // Similar to g_script.mCurrLine, but may be different when breaking post-function-call, before continuing expression evaluation.
 	ExprTokenType *mThrownToken = nullptr; // The exception that triggered the current exception breakpoint.
-	bool mBreakOnExceptionWasSet = false, mBreakOnExceptionIsTemporary = false, mBreakOnException = false; // Supports a single coverall breakpoint exception.
-	int mBreakOnExceptionID = 0;
+	// Linked list of breakpoints.  Using the exception breakpoint as the const head of the list simplifies
+	// some operations and reduces code size.  The first line breakpoint is always mFirstBreakpoint->next.
+	Breakpoint *const mFirstBreakpoint = &mBreakOnException, *mLastBreakpoint = &mBreakOnException;
+	Breakpoint mBreakOnException { BT_Exception, 0 }; // Supports a single catchall breakpoint exception.
 
 	class Buffer
 	{
@@ -425,9 +429,10 @@ private:
 	int EnterBreakState(LPCSTR aReason = "ok");
 	void ExitBreakState();
 
-	int WriteBreakpointXml(Breakpoint *aBreakpoint, Line *aLine);
-	int WriteExceptionBreakpointXml();
+	int WriteBreakpointXml(Breakpoint *aBreakpoint);
 	Line *FindFirstLineForBreakpoint(int file_index, UINT line_no);
+	Breakpoint *CreateBreakpoint();
+	void DeleteBreakpoint(Breakpoint *aBp);
 
 	void AppendPropertyName(CStringA &aNameBuf, size_t aParentNameLength, const char *aName);
 	void AppendStringKey(CStringA &aNameBuf, size_t aParentNameLength, const char *aKey);

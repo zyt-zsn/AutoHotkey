@@ -131,6 +131,30 @@ Line *Debugger::FindFirstLineForBreakpoint(int file_index, UINT line_no)
 	return found_line;
 }
 
+Breakpoint *Debugger::CreateBreakpoint()
+{
+	auto bp = new Breakpoint();
+	mLastBreakpoint->next = bp;
+	mLastBreakpoint = bp;
+	return bp;
+}
+
+void Debugger::DeleteBreakpoint(Breakpoint *aBp)
+{
+	// aBp != mFirstBreakpoint, because that's currently always &mBreakOnException.
+	for (Breakpoint *p = mFirstBreakpoint;; p = p->next)
+	{
+		if (p->next == aBp)
+		{
+			p->next = aBp->next;
+			if (mLastBreakpoint == aBp)
+				mLastBreakpoint = p;
+			break;
+		}
+	}
+	delete aBp;
+}
+
 // Set Line::mBreakpoint for all executable lines that share the line's number,
 // such as an expression and any fat arrow function's it contains, or all param
 // default initializers in e.g. `Fn(a:=[], b:={}) {`.
@@ -164,7 +188,7 @@ int Debugger::PreExecLine(Line *aLine)
 			while ((prev = line->mPrevLine) && prev->mLineNumber == line->mLineNumber && prev->mFileIndex == line->mFileIndex)
 				line = prev;
 			SetBreakpointForLineGroup(line, nullptr);
-			delete bp;
+			DeleteBreakpoint(bp);
 		}
 		return Break();
 	}
@@ -196,10 +220,10 @@ int Debugger::PreExecLine(Line *aLine)
 
 bool Debugger::PreThrow(ExprTokenType *aException)
 {
-	if (!mBreakOnException)
+	if (mBreakOnException.state != BS_Enabled)
 		return false;
-	if (mBreakOnExceptionIsTemporary)
-		mBreakOnException = mBreakOnExceptionWasSet = false;
+	if (mBreakOnException.temporary)
+		mBreakOnException.state = BS_Disabled;
 	mThrownToken = aException;
 	// The spec doesn't provide a way to differentiate between handled and unhandled exceptions,
 	// nor when to use the "exception" and "error" statuses, so we'll use them for that:
@@ -713,15 +737,12 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 	{
 		if (!strcmp(type, "exception") && lineno == 0 && !filename)
 		{
-			mBreakOnException = state;
-			mBreakOnExceptionIsTemporary = temporary;
-			mBreakOnExceptionWasSet = true;
-			if (!mBreakOnExceptionID)
-				mBreakOnExceptionID = Breakpoint::AllocateID();
+			mBreakOnException.state = state;
+			mBreakOnException.temporary = temporary;
 			
 			return mResponseBuf.WriteF(
 				"<response command=\"breakpoint_set\" transaction_id=\"%e\" state=\"%s\" id=\"%i\"/>"
-				, aTransactionId, state ? "enabled" : "disabled", mBreakOnExceptionID);
+				, aTransactionId, state ? "enabled" : "disabled", mBreakOnException.id);
 		}
 		return DEBUGGER_E_BREAKPOINT_TYPE;
 	}
@@ -750,7 +771,8 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 		Breakpoint *bp = line->mBreakpoint;
 		if (!bp)
 		{
-			bp = new Breakpoint();
+			bp = CreateBreakpoint();
+			bp->line = line;
 			SetBreakpointForLineGroup(line, bp);
 		}
 		bp->state = state;
@@ -764,17 +786,14 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 	return DEBUGGER_E_BREAKPOINT_INVALID;
 }
 
-int Debugger::WriteBreakpointXml(Breakpoint *aBreakpoint, Line *aLine)
+int Debugger::WriteBreakpointXml(Breakpoint *aBreakpoint)
 {
+	if (aBreakpoint->type == BT_Exception)
+		return mResponseBuf.WriteF("<breakpoint id=\"%i\" type=\"exception\" state=\"%s\" exception=\"Any\"/>"
+			, aBreakpoint->id, aBreakpoint->state == BS_Enabled ? "enabled" : "disabled");
 	return mResponseBuf.WriteF("<breakpoint id=\"%i\" type=\"line\" state=\"%s\" filename=\"%r\" lineno=\"%u\"/>"
 		, aBreakpoint->id, aBreakpoint->state ? "enabled" : "disabled"
-		, Line::sSourceFile[aLine->mFileIndex], aLine->mLineNumber);
-}
-
-int Debugger::WriteExceptionBreakpointXml()
-{
-	return mResponseBuf.WriteF("<breakpoint id=\"%i\" type=\"exception\" state=\"%s\" exception=\"Any\"/>"
-		, mBreakOnExceptionID, mBreakOnException ? "enabled" : "disabled");
+		, Line::sSourceFile[aBreakpoint->line->mFileIndex], aBreakpoint->line->mLineNumber);
 }
 
 DEBUGGER_COMMAND(Debugger::breakpoint_get)
@@ -785,24 +804,16 @@ DEBUGGER_COMMAND(Debugger::breakpoint_get)
 
 	int breakpoint_id = atoi(ArgValue(aArgV, 0));
 
-	Line *line;
-	for (line = g_script.mFirstLine; line; line = line->mNextLine)
+	for (auto bp = mFirstBreakpoint; bp; bp = bp->next)
 	{
-		if (line->mBreakpoint && line->mBreakpoint->id == breakpoint_id)
+		if (bp->id == breakpoint_id)
 		{
 			mResponseBuf.WriteF("<response command=\"breakpoint_get\" transaction_id=\"%e\">", aTransactionId);
-			WriteBreakpointXml(line->mBreakpoint, line);
+			WriteBreakpointXml(bp);
 			mResponseBuf.Write("</response>");
 
 			return DEBUGGER_E_OK;
 		}
-	}
-
-	if (breakpoint_id == mBreakOnExceptionID && mBreakOnExceptionWasSet)
-	{
-		mResponseBuf.WriteF("<response command=\"breakpoint_get\" transaction_id=\"%e\">", aTransactionId);
-		WriteExceptionBreakpointXml();
-		return mResponseBuf.Write("</response>");
 	}
 
 	return DEBUGGER_E_BREAKPOINT_NOT_FOUND;
@@ -812,7 +823,7 @@ DEBUGGER_COMMAND(Debugger::breakpoint_update)
 {
 	char arg, *value;
 	
-	int breakpoint_id = 0; // Breakpoint IDs begin at 1.
+	int breakpoint_id = -1;
 	LineNumberType lineno = 0;
 	char state = -1;
 
@@ -823,6 +834,8 @@ DEBUGGER_COMMAND(Debugger::breakpoint_update)
 		switch (arg)
 		{
 		case 'd':
+			if (!cisdigit(*value))
+				return DEBUGGER_E_INVALID_OPTIONS;
 			breakpoint_id = atoi(value);
 			break;
 
@@ -849,25 +862,22 @@ DEBUGGER_COMMAND(Debugger::breakpoint_update)
 		}
 	}
 
-	if (!breakpoint_id)
-		return DEBUGGER_E_INVALID_OPTIONS;
-
-	Line *line;
-	for (line = g_script.mFirstLine; line; line = line->mNextLine)
+	for (auto bp = mFirstBreakpoint; bp; bp = bp->next)
 	{
-		Breakpoint *bp = line->mBreakpoint;
-
-		if (bp && bp->id == breakpoint_id)
+		if (bp->id == breakpoint_id)
 		{
-			if (lineno && line->mLineNumber != lineno)
+			if (lineno && !bp->line)
+				return DEBUGGER_E_INVALID_OPTIONS;
+
+			if (lineno && bp->line->mLineNumber != lineno)
 			{
 				// Move the breakpoint within its current file.
-				Line *new_line = FindFirstLineForBreakpoint(line->mFileIndex, lineno);
-				if (new_line != line)
+				Line *new_line = FindFirstLineForBreakpoint(bp->line->mFileIndex, lineno);
+				if (new_line != bp->line)
 				{
 					if (!new_line)
 						return DEBUGGER_E_BREAKPOINT_INVALID;
-					SetBreakpointForLineGroup(line, nullptr);
+					SetBreakpointForLineGroup(bp->line, nullptr);
 					SetBreakpointForLineGroup(new_line, bp);
 				}
 			}
@@ -879,12 +889,6 @@ DEBUGGER_COMMAND(Debugger::breakpoint_update)
 		}
 	}
 
-	if (breakpoint_id == mBreakOnExceptionID)
-	{
-		mBreakOnException = state;
-		return DEBUGGER_E_OK;
-	}
-
 	return DEBUGGER_E_BREAKPOINT_NOT_FOUND;
 }
 
@@ -894,24 +898,26 @@ DEBUGGER_COMMAND(Debugger::breakpoint_remove)
 	if (aArgCount != 1 || ArgChar(aArgV, 0) != 'd')
 		return DEBUGGER_E_INVALID_OPTIONS;
 
-	int breakpoint_id = atoi(ArgValue(aArgV, 0));
-
-	Line *line;
-	for (line = g_script.mFirstLine; line; line = line->mNextLine)
+	auto arg = ArgValue(aArgV, 0);
+	if (!cisdigit(*arg)) // Don't interpret empty/non-numeric values as ID 0.
+		return DEBUGGER_E_INVALID_OPTIONS;
+	int breakpoint_id = atoi(arg);
+	
+	if (breakpoint_id == mBreakOnException.id)
 	{
-		if (line->mBreakpoint && line->mBreakpoint->id == breakpoint_id)
-		{
-			delete line->mBreakpoint;
-			SetBreakpointForLineGroup(line, nullptr);
-			return DEBUGGER_E_OK;
-		}
+		mBreakOnException.state = BS_Disabled;
+		return DEBUGGER_E_OK;
 	}
 
-	if (breakpoint_id == mBreakOnExceptionID && mBreakOnExceptionWasSet)
+	// mFirstBreakpoint itself is currently always &mBreakOnException.
+	for (auto bp = mFirstBreakpoint->next; bp; bp = bp->next)
 	{
-		mBreakOnException = false;
-		mBreakOnExceptionWasSet = false;
-		return DEBUGGER_E_OK;
+		if (bp->id == breakpoint_id)
+		{
+			SetBreakpointForLineGroup(bp->line, nullptr);
+			DeleteBreakpoint(bp);
+			return DEBUGGER_E_OK;
+		}
 	}
 
 	return DEBUGGER_E_BREAKPOINT_NOT_FOUND;
@@ -924,22 +930,8 @@ DEBUGGER_COMMAND(Debugger::breakpoint_list)
 	
 	mResponseBuf.WriteF("<response command=\"breakpoint_list\" transaction_id=\"%e\">", aTransactionId);
 	
-	int last_id = -1;
-	Line *line;
-	for (line = g_script.mFirstLine; line; line = line->mNextLine)
-	{
-		if (line->mBreakpoint && last_id != line->mBreakpoint->id)
-		{
-			WriteBreakpointXml(line->mBreakpoint, line);
-			// A breakpoint could be on a group of lines that have the same number, but might
-			// not be consecutive lines (i.e. some lines in-between might have no breakpoint).
-			// So just track the last ID to avoid writing the same breakpoint multiple times.
-			last_id = line->mBreakpoint->id;
-		}
-	}
-
-	if (mBreakOnExceptionWasSet)
-		WriteExceptionBreakpointXml();
+	for (auto bp = mFirstBreakpoint->state ? mFirstBreakpoint : mFirstBreakpoint->next; bp; bp = bp->next)
+		WriteBreakpointXml(bp);
 
 	return mResponseBuf.Write("</response>");
 }
