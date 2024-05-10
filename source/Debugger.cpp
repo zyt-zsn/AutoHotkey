@@ -199,7 +199,7 @@ int Debugger::PreExecLine(Line *aLine)
 		// Although IF/ELSE/LOOP skips its block-begin, standalone/function-body block-begin still gets here; we want to skip it,
 		// unless it's the block-end of a function, to allow breaking there after a "return" to inspect variables while still in scope.
 		&& !PreExecLineIsSlippery(aLine)
-		&& aLine->mLineNumber) // Some scripts (i.e. LowLevel/code.ahk) use mLineNumber==0 to indicate the Line has been generated and injected by the script.
+		&& aLine->mLineNumber) // Lines with no number should be skipped (e.g. lines inserted by Script::DefineClassInit).
 	{
 		return Break();
 	}
