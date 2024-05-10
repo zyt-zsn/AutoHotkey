@@ -945,8 +945,6 @@ ResultType Script::AutoExecSection()
 	// want a directive to affect the default settings.
 	g->HotCriterion = NULL;
 	
-	// Must be done before InitClasses(), otherwise destroying a Gui in a class constructor
-	// would terminate the script:
 	++g_nThreads;
 
 	// v1.0.48: Due to switching from SET_UNINTERRUPTIBLE_TIMER to IsInterruptible():
