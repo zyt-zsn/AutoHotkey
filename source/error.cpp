@@ -23,18 +23,9 @@ GNU General Public License for more details.
 #include <richedit.h>
 
 
-Line *Line::PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo)
-// Returns a different type of result for use with the Pre-parsing methods.
+ResultType Line::PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo)
 {
-	// Make all preparsing errors critical because the runtime reliability
-	// of the program relies upon the fact that the aren't any kind of
-	// problems in the script (otherwise, unexpected behavior may result).
-	// Update: It's okay to return FAIL in this case.  CRITICAL_ERROR should
-	// be avoided whenever OK and FAIL are sufficient by themselves, because
-	// otherwise, callers can't use the NOT operator to detect if a function
-	// failed (since FAIL is value zero, but CRITICAL_ERROR is non-zero):
-	LineError(aErrorText, FAIL, aExtraInfo);
-	return NULL; // Always return NULL because the callers use it as their return value.
+	return LineError(aErrorText, FAIL, aExtraInfo);
 }
 
 

@@ -580,7 +580,7 @@ public:
 		if (Line::sSourceFileCount)
 			return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
 		EarlyAppInit();
-		if (!g_script.Init(aScriptPath))
+		if (!g_script.Init(aScriptPath, nullptr))
 			return E_FAIL;
 		if (g_script.LoadFromFile(aScriptPath) == LOADING_FAILED
 			|| !InitForExecution())

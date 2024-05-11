@@ -1187,7 +1187,7 @@ public:
 	static LPTSTR LogToText(LPTSTR aBuf, int aBufSize);
 	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed = 0, bool aLineWasResumed = false, bool aLineNumber = true);
 
-	Line *PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo = _T(""));
+	ResultType PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo = _T(""));
 	// Call this LineError to avoid confusion with Script's error-displaying functions:
 	ResultType LineError(LPCTSTR aErrorText, ResultType aErrorType = FAIL, LPCTSTR aExtraInfo = _T(""));
 	IObject *CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Object *aPrototype);
@@ -1477,6 +1477,7 @@ public:
 };
 
 
+class ScriptModule;
 class UserFunc : public Func
 {
 public:
@@ -1486,6 +1487,7 @@ public:
 	Object *mClass = nullptr; // The class or prototype object which this user-defined method was defined for, or nullptr.
 	Label *mFirstLabel = nullptr, *mLastLabel = nullptr; // Linked list of private labels.
 	UserFunc *mOuterFunc = nullptr; // Func which contains this func (usually nullptr).
+	ScriptModule *mModule = nullptr; // Module in which this function was defined.
 	VarList mVars {}; // Sorted list of non-static local variables.
 	VarList mStaticVars {}; // Sorted list of static variables.
 	Var **mDownVar = nullptr, **mUpVar = nullptr;
@@ -2085,6 +2087,10 @@ struct DerefList
 
 
 
+#include "script_module.h"
+
+
+
 class Script
 {
 private:
@@ -2131,8 +2137,14 @@ private:
 	int mLabelCount;
 #endif
 	FuncList mFuncs;
+
+	ScriptModuleList mModules;
+	ScriptModule mBuiltinModule;
+	ScriptImport mDefaultImport { &mBuiltinModule };
+	ScriptModule mDefaultModule { _T("__Main"), mDefaultImport };
+	ScriptModule *mCurrentModule = &mBuiltinModule;
+	ScriptModule *mLastModule = nullptr;
 	
-	VarList mVars; // Sorted list of global variables.
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
 	Line *mLineParent = nullptr; // While loading the script, the parent line or block-begin for the next line to be added.
 	Line *mPendingRelatedLine;
@@ -2202,10 +2214,12 @@ private:
 	ResultType AddLabel(LPTSTR aLabelName, bool aAllowDupe);
 	ResultType AddLine(ActionTypeType aActionType, LPTSTR aArg[] = NULL, int aArgc = 0, bool aAllArgsAreExpressions = false);
 
+	ResultType PreparseExpressions();
 	ResultType PreparseExpressions(Line *aStartingLine);
 	ResultType PreparseExpressions(FuncList &aFuncs);
 	void PreparseHotkeyIfExpr(Line *aLine);
-	Line *PreparseCommands(Line *aStartingLine);
+	ResultType PreparseCommands();
+	ResultType PreparseCommands(Line *aStartingLine);
 	ResultType PreparseCatchVar(Line *aLine);
 	ResultType PreparseCatchClass(Line *aLine);
 	bool IsLabelTarget(Line *aLine);
@@ -2267,7 +2281,7 @@ public:
 
 	UserMenu *mTrayMenu; // Our tray menu, which should be destroyed upon exiting the program.
     
-	ResultType Init(LPTSTR aScriptFilename);
+	ResultType Init(LPTSTR aScriptFilename, IObject *aArgs);
 	ResultType CreateWindows();
 	void EnableClipboardListener(bool aEnable);
 	void AllowMainWindow(bool aAllow);
@@ -2278,6 +2292,7 @@ public:
 	ResultType SetTrayIcon(LPCTSTR aIconFile, int aIconNumber, ToggleValueType aFreezeIcon);
 	void SetTrayTip(LPTSTR aText);
 	ResultType AutoExecSection();
+	ResultType ExecuteModule(ScriptModule *aModule);
 	bool IsPersistent();
 	void ExitIfNotPersistent(ExitReasons aExitReason);
 	ResultType Edit(LPCTSTR aFileName = nullptr);
@@ -2339,7 +2354,6 @@ public:
 	#define FINDVAR_GLOBAL			VAR_GLOBAL
 	#define FINDVAR_LOCAL			VAR_LOCAL
 	#define FINDVAR_GLOBAL_FALLBACK	0x100
-	#define FINDVAR_NO_BIF			0x200
 	#define ADDVAR_NO_VALIDATE		0x400
 	#define FINDVAR_FOR_WRITE		FINDVAR_DEFAULT
 	#define FINDVAR_FOR_READ		(FINDVAR_DEFAULT | FINDVAR_GLOBAL_FALLBACK)
@@ -2352,9 +2366,15 @@ public:
 	static VarEntry *GetBuiltInVar(LPCTSTR aVarName);
 
 	// Alias to improve clarity and reduce code size (if compiler chooses not to inline; due to how parameter defaults work):
-	Var *FindGlobalVar(LPCTSTR aVarName, size_t aVarNameLength = 0) { return FindVar(aVarName, aVarNameLength, FINDVAR_GLOBAL); }
-	// For maintainability.
-	VarList *GlobalVars() { return &mVars; }
+	Var *FindGlobalVar(LPCTSTR aVarName, size_t aVarNameLength = 0) { return FindVar(aVarName, aVarNameLength, FINDVAR_GLOBAL | FINDVAR_GLOBAL_FALLBACK); }
+
+	VarList *GlobalVars() { return &(g->CurrentFunc ? g->CurrentFunc->mModule : mCurrentModule)->mVars; }
+	
+	ResultType ParseModuleDirective(LPCTSTR aName);
+	ResultType ParseImportStatement(LPTSTR aBuf);
+	ResultType CloseCurrentModule();
+	ResultType ResolveImports();
+	Var *FindImportedVar(LPCTSTR aVarName);
 
 	ResultType DerefInclude(LPTSTR &aOutput, LPTSTR aBuf);
 
@@ -2418,6 +2438,7 @@ public:
 	ResultType PreprocessLocalVars(FuncList &aFuncs);
 	ResultType PreprocessLocalVars(UserFunc &aFunc);
 	ResultType PreparseVarRefs();
+	ResultType PreparseVarRefs(Line *aStartingLine);
 	void CountNestedFuncRefs(UserFunc &aWithin, LPCTSTR aFuncName);
 
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Line *aLine, ResultType aErrorType, Object *aPrototype = nullptr);

@@ -448,7 +448,7 @@ Script::~Script() // Destructor.
 
 
 
-ResultType Script::Init(LPTSTR aScriptFilename)
+ResultType Script::Init(LPTSTR aScriptFilename, IObject *aArgs)
 // Returns OK or FAIL.
 // Caller has provided an empty string for aScriptFilename if this is a compiled script.
 // Otherwise, aScriptFilename can be NULL if caller hasn't determined the filename of the script yet.
@@ -563,6 +563,18 @@ ResultType Script::Init(LPTSTR aScriptFilename)
 #endif
 	mMainWindowTitle = SimpleHeap::Alloc(buf);
 
+	// Up to this point, mCurrentModule == &mBuiltinModule for initialization of built-ins.
+	// From this point, declarations should add names to a script module, not mBuiltinModule.
+	mCurrentModule = &mDefaultModule;
+	mModules.Insert(&mDefaultModule, 0);
+	ASSERT(mModules.mCount == 1);
+
+	if (aArgs) // Caller-provided command-line args.
+	{
+		Var *var = g_script.FindOrAddVar(_T("A_Args"), 6, VAR_DECLARE_GLOBAL);
+		if (!var || !var->AssignSkipAddRef(aArgs))
+			return FAIL;
+	}
 
 	return OK;
 }
@@ -946,6 +958,8 @@ ResultType Script::AutoExecSection()
 	g->HotCriterion = NULL;
 	
 	++g_nThreads;
+	mAutoExecSectionIsRunning = true;
+	DEBUGGER_STACK_PUSH(g_AutoExecuteThreadDesc)
 
 	// v1.0.48: Due to switching from SET_UNINTERRUPTIBLE_TIMER to IsInterruptible():
 	// In spite of the comments in IsInterruptible(), periodically have a timer call IsInterruptible() due to
@@ -967,29 +981,30 @@ ResultType Script::AutoExecSection()
 	// actually tested on Windows XP and a message does indeed arrive 23 hours after the script starts.
 	SetTimer(g_hWnd, TIMER_ID_REFRESH_INTERRUPTIBILITY, 23*60*60*1000, RefreshInterruptibility); // 3rd param must not exceed 0x7FFFFFFF (2147483647; 24.8 days).
 
-	ResultType ExecUntil_result;
+	SET_AUTOEXEC_TIMER(100); // Currently this only marks the auto-execute thread as uninterruptible for the time indicated.
+	
+	// v1.0.25: This is now done here, closer to the actual execution of the first line in the script,
+	// to avoid an unnecessary Sleep(10) that would otherwise occur in ExecUntil:
+	mLastPeekTime = GetTickCount();
 
-	if (!mFirstLine) // In case it's ever possible to be empty.
-		ExecUntil_result = OK;
-		// And continue on to do normal exit routine so that the right ExitCode is returned by the program.
-	else
+	ResultType result = OK;
+
+	// Execute all modules, in reverse order of creation.
+	for (mCurrentModule = mLastModule; mCurrentModule; mCurrentModule = mCurrentModule->mPrev)
 	{
-		SET_AUTOEXEC_TIMER(100); // Currently this only marks the auto-execute thread as uninterruptible for the time indicated.
-		mAutoExecSectionIsRunning = true;
-
-		// v1.0.25: This is now done here, closer to the actual execution of the first line in the script,
-		// to avoid an unnecessary Sleep(10) that would otherwise occur in ExecUntil:
-		mLastPeekTime = GetTickCount();
-
-		DEBUGGER_STACK_PUSH(g_AutoExecuteThreadDesc)
-		ExecUntil_result = mFirstLine->ExecUntil(UNTIL_RETURN); // Might never return (e.g. infinite loop or ExitApp).
-		DEBUGGER_STACK_POP()
-
-		mAutoExecSectionIsRunning = false;
+		result = ExecuteModule(mCurrentModule);
+		if (result != OK)
+			break;
 	}
+
+	// Reset current module in case ListVars is used without g->CurrentFunc set.
+	mCurrentModule = &mDefaultModule;
+
 	// REMEMBER: The ExecUntil() call above will never return if the AutoExec section never finishes
 	// (e.g. infinite loop) or it uses Exit/ExitApp.
 
+	DEBUGGER_STACK_POP()
+	mAutoExecSectionIsRunning = false;
 	--g_nThreads;
 
 	// Check if an exception has been thrown
@@ -1000,7 +1015,23 @@ ResultType Script::AutoExecSection()
 	// interruptible.  This avoids having to treat the first g-item as special in various places.
 	global_maximize_interruptibility(*g); // See below.
 
-	return ExecUntil_result;
+	return result;
+}
+
+
+
+ResultType Script::ExecuteModule(ScriptModule *aModule)
+{
+	if (!aModule->mFirstLine || aModule->mExecuted)
+		return OK;
+	aModule->mExecuted = true; // Set first to block recursion in cases where imp->mod imports aModule.
+	for (auto imp = aModule->mImports; imp; imp = imp->next)
+	{
+		auto result = ExecuteModule(imp->mod);
+		if (result != OK)
+			return result;
+	}
+	return aModule->mFirstLine->ExecUntil(UNTIL_RETURN);
 }
 
 
@@ -1254,6 +1285,7 @@ ResultType Script::ExitApp(ExitReasons aExitReason)
 
 
 
+#ifdef RELEASE_SOME_OBJECTS_ON_EXIT
 void ReleaseVarObjects(VarList &aVars)
 {
 	for (int v = 0; v < aVars.mCount; ++v)
@@ -1277,6 +1309,7 @@ void ReleaseStaticVarObjects(FuncList &aFuncs)
 		ReleaseVarObjects(f.mStaticVars);
 	}
 }
+#endif
 
 
 
@@ -1284,6 +1317,10 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 // Note that g_script's destructor takes care of most other cleanup work, such as destroying
 // tray icons, menus, and unowned windows such as ToolTip.
 {
+#ifdef RELEASE_SOME_OBJECTS_ON_EXIT
+	// v2.1: This was disabled rather than updating it to iterate through module variables because
+	// it has always been incomplete (doesn't finalize all objects) and caused unexpected behaviour
+	// (some global or static variables are arbitrarily unset before __delete executes).
 	// L31: Release objects stored in variables, where possible.
 	if (aExitReason != EXIT_CRITICAL) // i.e. Avoid making matters worse if EXIT_CRITICAL.
 	{
@@ -1295,6 +1332,7 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 		ReleaseVarObjects(mVars);
 		ReleaseStaticVarObjects(mFuncs);
 	}
+#endif
 #ifdef CONFIG_DEBUGGER // L34: Exit debugger *after* the above to allow debugging of any invoked __Delete handlers.
 	g_Debugger.Exit(aExitReason);
 #endif
@@ -1356,13 +1394,17 @@ UINT Script::LoadFromFile(LPCTSTR aFileSpec)
 		return LOADING_FAILED;
 	}
 #endif
+
+	if (!CloseCurrentModule() || !ResolveImports())
+		return LOADING_FAILED;
+
 	// Preparse all expressions and resolve all variable references.  The outer-most scope
 	// is preparsed first, then each function, working inward through all nested functions.
 	// All of a function's non-dynamic local variables are created before variable names
 	// are resolved in nested functions.
 	// Read references (VARREF_READ) are resolved only after all assignments have been
 	// preparsed throughout the script, in case one creates an assume-global variable.
-	if (!PreparseExpressions(mFirstLine)
+	if (!PreparseExpressions()
 		|| !PreparseExpressions(mFuncs)
 		|| !PreparseVarRefs())
 		return LOADING_FAILED; // Error was already displayed by the above call.
@@ -1389,16 +1431,7 @@ UINT Script::LoadFromFile(LPCTSTR aFileSpec)
 	SetCurrentDirectory(mFileDir);
 	g_WorkingDir.SetString(mFileDir);
 
-	// Even if the last line of the script is already "exit", always add another
-	// one in case the script ends in a label.  That way, every label will have
-	// a non-NULL target, which simplifies other aspects of script execution.
-	// Making sure that all scripts end with an EXIT ensures that if the script
-	// file ends with ELSEless IF or an ELSE, that IF's or ELSE's mRelatedLine
-	// will be non-NULL, which further simplifies script execution.
-	if (!AddLine(ACT_EXIT))
-		return LOADING_FAILED;
-
-	if (!PreparseCommands(mFirstLine))
+	if (!PreparseCommands())
 		return LOADING_FAILED; // Error was already displayed by the above calls.
 	
 #ifndef AUTOHOTKEYSC
@@ -2308,6 +2341,12 @@ process_completed_line:
 		else if (IsFunctionDefinition(buf, next_buf))
 		{
 			if (!DefineFunc(buf))
+				return FAIL;
+			goto continue_main_loop;
+		}
+		else if (!g->CurrentFunc && !_tcsnicmp(buf, _T("Import"), 6) && IS_SPACE_OR_TAB(buf[6]))
+		{
+			if (!ParseImportStatement(buf + 7))
 				return FAIL;
 			goto continue_main_loop;
 		}
@@ -3838,6 +3877,13 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		else
 			return ScriptError(ERR_PARAM1_INVALID, parameter);
 		return CONDITION_TRUE;
+	}
+
+	if (IS_DIRECTIVE_MATCH(_T("#Module")))
+	{
+		if (!parameter)
+			return ScriptError(ERR_PARAM1_REQUIRED);
+		return ParseModuleDirective(parameter);
 	}
 
 	// Otherwise, report that this line isn't a directive:
@@ -6708,7 +6754,7 @@ T *ScriptItemList<T, S>::Find(LPCTSTR aName, size_t aNameLength, int *apInsertPo
 
 Func *Script::FindGlobalFunc(LPCTSTR aFuncName, size_t aFuncNameLength)
 {
-	if (Var *var = FindVar(aFuncName, aFuncNameLength, VAR_GLOBAL))
+	if (Var *var = FindGlobalVar(aFuncName, aFuncNameLength))
 		if (var->Type() == VAR_CONSTANT)
 			return dynamic_cast<Func *>(var->ToObject());
 	return nullptr;
@@ -6791,6 +6837,7 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, FuncDefType
 
 	auto the_new_func = new UserFunc(new_name);
 
+	the_new_func->mModule = mCurrentModule;
 	the_new_func->mIsFuncExpression = aIsInExpression;
 
 	if (aClassObject)
@@ -6856,7 +6903,7 @@ Var *Script::AddFuncVar(UserFunc *aFunc)
 	if (aFunc->mIsStatic)
 		scope |= VAR_LOCAL_STATIC;
 	size_t name_length = _tcslen(aFunc->mName);
-	Var *var = name_length ? FindVar(aFunc->mName, name_length, FINDVAR_NO_BIF | scope, &varlist, &insert_pos, &result) : NULL;
+	Var *var = name_length ? FindVar(aFunc->mName, name_length, scope, &varlist, &insert_pos, &result) : NULL;
 	if (var && var->IsDeclared())
 	{
 		// Anything found at this early stage must have been created by a prior declaration
@@ -6948,6 +6995,11 @@ ResultType ScriptItemList<T,S>::Alloc(int aAllocCount)
 	mCountMax = aAllocCount;
 	return OK;
 }
+
+
+
+// Explicit instantiation needed for other compilation units.
+template struct ScriptItemList<ScriptModule, 16>;
 
 
 
@@ -7080,21 +7132,25 @@ Var *Script::FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 		if (apList) *apList = varlist;
 		if (apInsertPos) *apInsertPos = insert_pos;
 
-		if (!(aScope & FINDVAR_NO_BIF))
-		// Built-in functions can be shadowed, so are checked only in this section.
-		if (auto *func = GetBuiltInFunc(var_name))
+		if (aScope & FINDVAR_GLOBAL_FALLBACK) // Declarations shadow imported names and built-in functions.
 		{
-			Var *var = AddVar(var_name, aVarNameLength, varlist, insert_pos, VAR_DECLARE_GLOBAL | ADDVAR_NO_VALIDATE);
-			if (!var)
+			if (Var *found = FindImportedVar(var_name))
+				return found;
+
+			if (auto *func = GetBuiltInFunc(var_name))
 			{
-				if (aDisplayError)
-					*aDisplayError = FAIL;
-				func->Release();
-				return nullptr;
+				Var *var = AddVar(var_name, aVarNameLength, varlist, insert_pos, VAR_DECLARE_GLOBAL | ADDVAR_NO_VALIDATE);
+				if (!var)
+				{
+					if (aDisplayError)
+						*aDisplayError = FAIL;
+					func->Release();
+					return nullptr;
+				}
+				var->AssignSkipAddRef(func);
+				var->MakeReadOnly();
+				return var;
 			}
-			var->AssignSkipAddRef(func);
-			var->MakeReadOnly();
-			return var;
 		}
 	}
 
@@ -7289,13 +7345,13 @@ Var *Script::AddVar(LPCTSTR aVarName, size_t aVarNameLength, VarList *aList, int
 Var *Script::FindOrAddBuiltInVar(LPCTSTR aVarName, VarEntry *aVarEntry)
 {
 	int insert_pos;
-	if (Var *found = mVars.Find(aVarName, &insert_pos))
+	if (Var *found = mBuiltinModule.mVars.Find(aVarName, &insert_pos))
 		return found;
 	LPTSTR name = SimpleHeap::Malloc(aVarName);
 	if (!name)
 		return nullptr;
 	Var *the_new_var = new Var(name, aVarEntry, VAR_DECLARE_GLOBAL);
-	if (!the_new_var || !mVars.Insert(the_new_var, insert_pos))
+	if (!the_new_var || !mBuiltinModule.mVars.Insert(the_new_var, insert_pos))
 	{
 		MemoryError();
 		return nullptr;
@@ -7392,6 +7448,16 @@ ResultType Script::AddGroup(LPCTSTR aGroupName)
 
 
 
+ResultType Script::PreparseExpressions()
+{
+	for (mCurrentModule = mLastModule; mCurrentModule; mCurrentModule = mCurrentModule->mPrev)
+		if (!PreparseExpressions(mCurrentModule->mFirstLine))
+			return FAIL;
+	return OK;
+}
+
+
+
 ResultType Script::PreparseExpressions(Line *aStartingLine)
 {
 	for (Line *line = aStartingLine; line; line = line->mNextLine) // For each line.
@@ -7475,7 +7541,18 @@ ResultType Script::PreparseExpressions(FuncList &aFuncs)
 
 
 
-Line *Script::PreparseCommands(Line *aStartingLine)
+ResultType Script::PreparseCommands()
+{
+	for (mCurrentModule = mLastModule; mCurrentModule; mCurrentModule = mCurrentModule->mPrev)
+		if (!PreparseCommands(mCurrentModule->mFirstLine))
+			return FAIL;
+	mCurrentModule = &mDefaultModule; // Reset in case debugger queries properties prior to AutoExecSection().
+	return OK;
+}
+
+
+
+ResultType Script::PreparseCommands(Line *aStartingLine)
 // Preparse any commands which might rely on blocks having been fully preparsed,
 // such as any command which has a jump target (label).
 // Also perform some late-stage optimizations and validation.
@@ -7605,7 +7682,7 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 				// Since the jump-point contains a deref, it must be resolved at runtime:
 				line->mRelatedLine = NULL;
   			else if (!line->GetJumpTarget(false))
-				return NULL; // Error was already displayed by the called function.
+				return FAIL; // Error was already displayed by the called function.
 			break;
 
 		case ACT_HOTKEY_IF:
@@ -7623,14 +7700,14 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 
 		case ACT_CATCH:
 			if (!PreparseCatchClass(line))
-				return nullptr;
+				return FAIL;
 			break;
 		}
 
 		// Finalize and optimize postfix expressions.
 		for (int i = 0; i < line->mArgc; ++i)
 			if (line->mArg[i].postfix && !line->FinalizeExpression(line->mArg[i]))
-				return nullptr;
+				return FAIL;
 
 		// Check for unreachable code.
 		if (g_Warn_Unreachable)
@@ -7641,9 +7718,7 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 		case ACT_CONTINUE:
 		case ACT_GOTO:
 		// v2: ACT_EXIT is always from AddLine(ACT_EXIT), since a script calling Exit would produce ACT_EXPRESSION.
-		// Exit could be parsed as both ACT_EXIT and as a function, but that would create minor inconsistencies
-		// between "Exit" and "(x && Exit())", or Exit called directly vs. called via a separate function.
-		case ACT_EXIT:
+		//case ACT_EXIT:
 		//case ACT_EXITAPP: // Excluded since it's just a function in v2, and there can't be any expectation that the code following it will execute anyway.
 			Line *next_line = line->mNextLine;
 			if (!next_line // line is the script's last line.
@@ -7665,8 +7740,7 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 			ScriptWarning(g_Warn_Unreachable, buf, _T(""), next_line);
 		}
 	} // for()
-	// Return something non-NULL to indicate success:
-	return mLastLine;
+	return OK;
 }
 
 
@@ -10718,7 +10792,11 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			continue;
 
 		case ACT_EXIT: // In this context it's the ACT_EXIT added automatically by LoadFromFile().
-			return EARLY_EXIT;
+			// Exit at the end of the auto-execute section has historically been equivalent to Return,
+			// but with v2.1 we need this to be distinct from Exit() as it is added to the end of each
+			// module.  Modules aren't given their own initialization thread since they might want to
+			// change default settings by design.
+			return OK;
 
 #ifdef _DEBUG
 		default:
@@ -12289,7 +12367,17 @@ ResultType Script::PreprocessLocalVars(UserFunc &aFunc)
 
 ResultType Script::PreparseVarRefs()
 {
-	for (Line *line = mFirstLine; line; line = line->mNextLine)
+	for (mCurrentModule = mLastModule; mCurrentModule; mCurrentModule = mCurrentModule->mPrev)
+		if (!PreparseVarRefs(mCurrentModule->mFirstLine))
+			return FAIL;
+	return OK;
+}
+
+
+
+ResultType Script::PreparseVarRefs(Line *aStartingLine)
+{
+	for (Line *line = aStartingLine; line; line = line->mNextLine)
 	{
 		switch (line->mActionType)
 		{ // Establish context for FindOrAddVar:
@@ -12404,7 +12492,8 @@ LPTSTR Script::ListVars(LPTSTR aBuf, int aBufSize) // aBufSize should be an int 
 	}
 	aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%sGlobal Variables (alphabetical)%s")
 		, (aBuf > aBuf_orig) ? _T("\r\n\r\n") : _T(""), LIST_VARS_UNDERLINE);
-	aBuf = ListVarsHelper(aBuf, aBufSize, aBuf_orig, mVars);
+	// TODO: Variables of all modules?
+	aBuf = ListVarsHelper(aBuf, aBufSize, aBuf_orig, *GlobalVars());
 	return aBuf;
 }
 

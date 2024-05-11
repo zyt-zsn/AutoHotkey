@@ -181,6 +181,9 @@
     <ClCompile Include="source\MdFunc.cpp">
       <Filter>Core</Filter>
     </ClCompile>
+    <ClCompile Include="source\script_module.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
     <ClCompile Include="source\ahklib.cpp">
       <Filter>DLL</Filter>
     </ClCompile>
@@ -292,6 +295,9 @@
       <Filter>Core</Filter>
     </ClInclude>
     <ClInclude Include="source\abi.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="source\script_module.h">
       <Filter>Core</Filter>
     </ClInclude>
     <ClInclude Include="source\DispObject.h">

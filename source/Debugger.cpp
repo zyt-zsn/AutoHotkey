@@ -107,7 +107,8 @@ inline bool BreakpointLineIsSlippery(Line *aLine)
 Line *Debugger::FindFirstLineForBreakpoint(int file_index, UINT line_no)
 {
 	Line *found_line = nullptr;
-	for (Line *line = g_script.mFirstLine; line; line = line->mNextLine)
+	for (auto mod = g_script.mLastModule; mod; mod = mod->mPrev)
+	for (Line *line = mod->mFirstLine; line; line = line->mNextLine)
 	{
 		if (line->mFileIndex == file_index && line->mLineNumber >= line_no)
 		{
