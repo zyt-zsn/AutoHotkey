@@ -211,9 +211,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 							error_value = &this_token;
 							goto unset_var;
 						}
-						// Currently SYM_OBJECT is not added to to_free[] as there aren't any built-in
-						// vars that create an object or call AddRef().  If that's changed, must update
-						// BIV_TrayMenu and Debugger::GetPropertyValue.
+						if (result_token.symbol == SYM_OBJECT)
+							to_free[to_free_count++] = &this_token; // A slot was reserved for this SYM_VAR.
 						this_token.CopyValueFrom(result_token);
 						goto push_this_token;
 					}
@@ -225,7 +224,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					if (result_token.marker != left_buf)
 					{
 						if (result_token.mem_to_free) // Persistent memory was already allocated for the result.
-							to_free[to_free_count++] = &this_token; // A slot was reserved for this SYM_DYNAMIC.
+							to_free[to_free_count++] = &this_token; // A slot was reserved for this SYM_VAR.
 							// Also push the value, below.
 						//else: Currently marker is assumed to point to persistent memory, such as a literal
 						// string, which should be safe to use at least until expression evaluation completes.

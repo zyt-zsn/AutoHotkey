@@ -1146,8 +1146,6 @@ int Debugger::GetPropertyValue(Var &aVar, ResultToken &aValue)
 		aValue.Free();
 		aValue.InitResult(aValue.buf);
 		aVar.Get(aValue);
-		if (aValue.symbol == SYM_OBJECT)
-			aValue.object->AddRef(); // See comments in ExpandExpression and BIV_TrayMenu.
 		if (aValue.Exited())
 			return DEBUGGER_E_EVAL_FAIL;
 	}
