@@ -873,7 +873,8 @@ void Var::Get(ResultToken &aResultToken)
 		aResultToken.symbol = SYM_INTEGER; // For _f_return_i() and consistency with BIFs.
 		return mVV->Get(aResultToken, mName);
 	}
-	ASSERT(mType == VAR_VIRTUAL_OBJ && IsObject());
+	if (mType != VAR_VIRTUAL_OBJ)
+		return ToToken(aResultToken);
 	if (mObject->Invoke(aResultToken, IT_GET | IF_BYPASS_METAFUNC, _T("__Value"), ExprTokenType(mObject), nullptr, 0) == INVOKE_NOT_HANDLED)
 		aResultToken.UnknownMemberError(ExprTokenType(mObject), IT_GET, _T("__Value"));
 }

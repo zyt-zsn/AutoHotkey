@@ -1141,21 +1141,10 @@ int Debugger::GetPropertyInfo(VarBkp &aBkp, PropertyInfo &aProp)
 
 int Debugger::GetPropertyValue(Var &aVar, ResultToken &aValue)
 {
-	if (aVar.IsVirtual())
-	{
-		aValue.Free();
-		aValue.InitResult(aValue.buf);
-		aVar.Get(aValue);
-		if (aValue.Exited())
-			return DEBUGGER_E_EVAL_FAIL;
-	}
-	else
-	{
-		aValue.Free();
-		aValue.mem_to_free = nullptr; // Any value would be overwritten but this must be cleared manually.
-		aVar.ToToken(aValue);
-	}
-	return DEBUGGER_E_OK;
+	aValue.Free();
+	aValue.InitResult(aValue.buf);
+	aVar.Get(aValue);
+	return aValue.Exited() ? DEBUGGER_E_EVAL_FAIL : DEBUGGER_E_OK;
 }
 
 int Debugger::GetPropertyValue(VarBkp &aBkp, ResultToken &aValue)
