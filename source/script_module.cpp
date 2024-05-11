@@ -2,6 +2,26 @@
 #include "script.h"
 
 
+Object *ScriptModule::sPrototype;
+
+
+ResultType ScriptModule::Invoke(IObject_Invoke_PARAMS_DECL)
+{
+	auto var = aName ? mVars.Find(aName) : nullptr;
+	if (!var)
+		return ObjectBase::Invoke(IObject_Invoke_PARAMS);
+
+	if (IS_INVOKE_SET && aParamCount == 1)
+		return var->Assign(*aParam[0]);
+
+	var->Get(aResultToken);
+	if (aResultToken.Exited() || aParamCount == 0 && IS_INVOKE_GET)
+		return aResultToken.Result();
+
+	return Object::ApplyParams(aResultToken, aFlags, aParam, aParamCount);
+}
+
+
 ResultType Script::ParseModuleDirective(LPCTSTR aName)
 {
 	if (g->CurrentFunc || mClassObjectCount)
@@ -23,11 +43,14 @@ ResultType Script::ParseImportStatement(LPTSTR aBuf)
 {
 	aBuf = omit_leading_whitespace(aBuf);
 	// This is fairly rigid because only a subset of the intended syntax is implemented:
-	if (_tcsnicmp(aBuf, _T("* from "), 7) || !Var::ValidateName(aBuf += 7, DISPLAY_NO_ERROR))
+	bool all = !_tcsnicmp(aBuf, _T("* from "), 7);
+	if (all) aBuf += 7;
+	if (!Var::ValidateName(aBuf, DISPLAY_NO_ERROR))
 		return ScriptError(_T("Invalid import"), aBuf);
-	auto imp = SimpleHeap::Alloc<ScriptImport>();
+	auto imp = new ScriptImport();
 	imp->name = SimpleHeap::Alloc(aBuf);
 	imp->mod = nullptr;
+	imp->all = all;
 	imp->line_number = mCombinedLineNumber;
 	imp->file_index = mCurrFileIndex;
 	imp->next = mCurrentModule->mImports;
@@ -40,10 +63,27 @@ Var *Script::FindImportedVar(LPCTSTR aVarName)
 {
 	for (auto imp = mCurrentModule->mImports; imp; imp = imp->next)
 	{
-		// TODO: Use exports, not all vars
-		auto var = imp->mod->mVars.Find(aVarName);
-		if (var && var->IsDeclared())
-			return var;
+		auto &mod = *imp->mod;
+		if (imp->all)
+		{
+			// TODO: Use exports, not all vars
+			auto var = mod.mVars.Find(aVarName);
+			if (var && var->IsDeclared())
+				return var;
+		}
+		else
+		{
+			if (!_tcsicmp(aVarName, imp->name))
+			{
+				if (!mod.mSelf)
+				{
+					mod.mSelf = new Var(imp->name, VAR_DECLARE_GLOBAL);
+					mod.mSelf->Assign(&mod);
+					mod.mSelf->MakeReadOnly();
+				}
+				return mod.mSelf;
+			}
+		}
 	}
 	return nullptr;
 }
