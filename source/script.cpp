@@ -3839,13 +3839,13 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		// than a switch() with a final case WARN_ALL that duplicates all of the assignments:
 
 		if (warnType == WARN_LOCAL_SAME_AS_GLOBAL || warnType == WARN_ALL)
-			g_Warn_LocalSameAsGlobal = warnMode;
+			mCurrentModule->Warn_LocalSameAsGlobal = warnMode;
 
 		if (warnType == WARN_UNREACHABLE || warnType == WARN_ALL)
-			g_Warn_Unreachable = warnMode;
+			mCurrentModule->Warn_Unreachable = warnMode;
 
 		if (warnType == WARN_VAR_UNSET || warnType == WARN_ALL)
-			g_Warn_VarUnset = warnMode;
+			mCurrentModule->Warn_VarUnset = warnMode;
 
 		return CONDITION_TRUE;
 	}
@@ -7363,7 +7363,7 @@ Var *Script::AddVar(LPCTSTR aVarName, size_t aVarNameLength, VarList *aList, int
 		return NULL;
 
 	if ((aScope & (VAR_LOCAL | VAR_DECLARED)) == VAR_LOCAL // This is an implicit local.
-		&& g_Warn_LocalSameAsGlobal && !mIsReadyToExecute // Not enabled at runtime because of overlap with #Warn UseUnset, and dynamic assignments in assume-local mode are less likely to be intended global.
+		&& g->CurrentFunc->mModule->Warn_LocalSameAsGlobal && !mIsReadyToExecute // This warning isn't desired at runtime (v2: might only be called at runtime by the debugger?).
 		&& FindGlobalVar(var_name, aVarNameLength))
 		WarnLocalSameAsGlobal(var_name);
 
@@ -7764,7 +7764,7 @@ ResultType Script::PreparseCommands(Line *aStartingLine)
 				return FAIL;
 
 		// Check for unreachable code.
-		if (g_Warn_Unreachable)
+		if (mCurrentModule->Warn_Unreachable)
 		switch (line->mActionType)
 		{
 		case ACT_RETURN:
@@ -7791,7 +7791,7 @@ ResultType Script::PreparseCommands(Line *aStartingLine)
 				break;
 			TCHAR buf[64];
 			sntprintf(buf, _countof(buf), _T("This line will never execute, due to %s preceding it."), g_act[line->mActionType].Name);
-			ScriptWarning(g_Warn_Unreachable, buf, _T(""), next_line);
+			ScriptWarning(mCurrentModule->Warn_Unreachable, buf, _T(""), next_line);
 		}
 	} // for()
 	return OK;

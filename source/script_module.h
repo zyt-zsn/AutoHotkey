@@ -30,6 +30,11 @@ public:
 	Var *mSelf = nullptr;
 	bool mExecuted = false;
 
+	// #Warn settings
+	WarnMode Warn_LocalSameAsGlobal = WARNMODE_OFF;
+	WarnMode Warn_Unreachable = WARNMODE_MSGBOX;
+	WarnMode Warn_VarUnset = WARNMODE_MSGBOX;
+
 	ScriptModule() {}
 	ScriptModule(LPCTSTR aName, ScriptImport &aDefaultImport)
 	{

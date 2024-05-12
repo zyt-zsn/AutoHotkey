@@ -1338,7 +1338,7 @@ void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExt
 
 void Script::WarnUnassignedVar(Var *var, Line *aLine)
 {
-	auto warnMode = g_Warn_VarUnset;
+	auto warnMode = mCurrentModule->Warn_VarUnset;
 	if (!warnMode)
 		return;
 
@@ -1383,11 +1383,10 @@ void Script::WarnLocalSameAsGlobal(LPCTSTR aVarName)
 // Relies on the following pre-conditions:
 //  1) It is an implicit (not declared) variable.
 //  2) Caller has verified that a global variable exists with the same name.
-//  3) g_Warn_LocalSameAsGlobal is on (true).
+//  3) g->CurrentFunc->mModule->Warn_LocalSameAsGlobal is on (true).
 //  4) g->CurrentFunc is the function which contains this variable.
 {
-	auto func_name = g->CurrentFunc ? g->CurrentFunc->mName : _T("");
 	TCHAR buf[DIALOG_TITLE_SIZE];
-	sntprintf(buf, _countof(buf), _T("%s  (in function %s)"), aVarName, func_name);
-	ScriptWarning(g_Warn_LocalSameAsGlobal, WARNING_LOCAL_SAME_AS_GLOBAL, buf);
+	sntprintf(buf, _countof(buf), _T("%s  (in function %s)"), aVarName, g->CurrentFunc->mName);
+	ScriptWarning(g->CurrentFunc->mModule->Warn_LocalSameAsGlobal, WARNING_LOCAL_SAME_AS_GLOBAL, buf);
 }
