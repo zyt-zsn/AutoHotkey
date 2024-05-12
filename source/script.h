@@ -2374,6 +2374,8 @@ public:
 	ResultType ParseImportStatement(LPTSTR aBuf);
 	ResultType CloseCurrentModule();
 	ResultType ResolveImports();
+	ResultType ResolveImports(ScriptImport &aImport);
+	Var *AddNewImportVar(LPTSTR aVarName);
 	Var *FindImportedVar(LPCTSTR aVarName);
 
 	ResultType DerefInclude(LPTSTR &aOutput, LPTSTR aBuf);

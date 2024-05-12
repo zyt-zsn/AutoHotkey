@@ -3,15 +3,14 @@
 
 struct ScriptImport
 {
-	LPTSTR name = nullptr;
+	LPTSTR names = nullptr;
 	ScriptModule *mod = nullptr;
 	ScriptImport *next = nullptr;
 	LineNumberType line_number = 0;
 	FileIndexType file_index = 0;
-	bool all = true;
 
 	ScriptImport() {}
-	ScriptImport(ScriptModule *aMod) : mod(aMod) {}
+	ScriptImport(ScriptModule *aMod) : mod(aMod), names(_T("*")) {}
 
 	void *operator new(size_t aBytes) {return SimpleHeap::Alloc(aBytes);}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Alloc(aBytes);}

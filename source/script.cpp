@@ -9827,7 +9827,7 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 		// to functions, ensure the var being referenced is valid for the given var_usage.
 		if (!ValidateVarUsage(this_postfix->var, this_postfix->var_usage))
 			return FAIL;
-		if (!this_postfix->var->IsAssignedSomewhere()
+		if (!this_postfix->var->ResolveAlias()->IsAssignedSomewhere() // ResolveAlias() is used to support aliases created by Import.
 			&& this_postfix->var_usage == VARREF_READ) // i.e. VARREF_READ_MAYBE (var?, var ?? value) generates no warning but doesn't mark var as assigned.
 			g_script.WarnUnassignedVar(this_postfix->var, this);
 	}
@@ -12335,7 +12335,7 @@ ResultType Script::PreprocessLocalVars(UserFunc &aFunc)
 					--aFunc.mDownVarCount;
 				}
 			}
-			else if (!var.IsAlias()) // At this stage only upvars are aliases.
+			else if (!var.IsAlias()) // At this stage only upvars are local aliases.
 			{
 				// This is a closure of aFunc and not an alias for an outer function's
 				// nested function constant.
@@ -12380,7 +12380,7 @@ ResultType Script::PreprocessLocalVars(UserFunc &aFunc)
 		for (int v = 0; v < var_count; ++v)
 		{
 			Var &var = *vars[v];
-			if (!var.IsAlias()) // At this stage only upvars are aliases.
+			if (!var.IsAlias()) // At this stage only upvars are local aliases.
 				continue;
 
 			Var *downvar = var.GetAliasFor(); // FindUpVar() set var to be an alias of the corresponding downvar.
@@ -12459,8 +12459,6 @@ ResultType Script::PreparseVarRefs(Line *aStartingLine)
 				}
 				if (  !(token->var = FindOrAddVar(token->var_deref->marker, token->var_deref->length, FINDVAR_FOR_READ))  )
 					return FAIL;
-				if (token->var->IsAlias()) // Upvar.
-					continue;
 				switch (token->var->Type())
 				{
 				case VAR_CONSTANT:
