@@ -2338,7 +2338,7 @@ public:
 	Var *AddFuncVar(UserFunc *aFunc);
 	UserFunc *AddFuncToList(UserFunc *aFunc);
 
-	ResultType DefineClass(LPTSTR aBuf);
+	ResultType DefineClass(LPTSTR aBuf, TCHAR aExport);
 	UserFunc *DefineClassInit(bool aStatic);
 	ResultType DefineClassVars(LPTSTR aBuf, bool aStatic);
 	ResultType DefineClassVarInit(LPTSTR aBuf, bool aStatic, Object *aObject, ActionTypeType aActionType = ACT_INVALID);

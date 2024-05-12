@@ -8,7 +8,7 @@ Object *ScriptModule::sPrototype;
 ResultType ScriptModule::Invoke(IObject_Invoke_PARAMS_DECL)
 {
 	auto var = aName ? mVars.Find(aName) : nullptr;
-	if (!var)
+	if (!var || !var->IsExported())
 		return ObjectBase::Invoke(IObject_Invoke_PARAMS);
 
 	if (IS_INVOKE_SET && aParamCount == 1)
@@ -66,9 +66,8 @@ Var *Script::FindImportedVar(LPCTSTR aVarName)
 		auto &mod = *imp->mod;
 		if (imp->all)
 		{
-			// TODO: Use exports, not all vars
 			auto var = mod.mVars.Find(aVarName);
-			if (var && var->IsDeclared())
+			if (var && var->IsExported())
 				return var;
 		}
 		else
