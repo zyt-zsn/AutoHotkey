@@ -748,6 +748,14 @@ ResultType Object::SetProperty(ResultToken &aResultToken, int aFlags, name_t aNa
 			field = candidate;
 	}
 
+	if (!field && !(aFlags & IF_BYPASS_METAFUNC))
+	{
+		// Call __Set before creating a field.
+		auto result = CallMetaVarg(aFlags, aName, aResultToken, aThisToken, aParam, aParamCount);
+		if (result != INVOKE_NOT_HANDLED)
+			return result;
+ 	}
+
 	if (aParamCount > 1)
 	{
 		if (!field)
