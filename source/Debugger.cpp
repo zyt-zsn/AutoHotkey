@@ -1206,7 +1206,6 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 	{
 		int page_start = aPageSize * aPage, page_end = aPageSize * (aPage + 1);
 
-		int i = 0;
 		if (mBase)
 		{
 			// Since this object has a "base", let it count as the first field.
@@ -1215,12 +1214,15 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 				aDebugger->WriteBaseProperty(mBase);
 				// Now fall through and retrieve field[0] (unless aPageSize == 1).
 			}
-			i++; // Count it even if it wasn't within the current page.
+			// So 20..39 becomes 19..38 when there's a base object:
+			else --page_start;
+			--page_end;
 		}
+		int i = page_start;
 		// For each field in the requested page...
-		for (int j = page_start - i; i < page_end && (index_t)j < mFields.Length(); ++i, ++j)
+		for ( ; i < page_end && (index_t)i < mFields.Length(); ++i)
 		{
-			Object::FieldType &field = mFields[j];
+			Object::FieldType &field = mFields[i];
 			ExprTokenType value;
 			if (field.symbol == SYM_DYNAMIC)
 			{
@@ -1239,7 +1241,7 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 			if (dynamic_cast<NativeFunc *>(enum_method))
 			{
 				// Built-in enumerators are always safe to call automatically.
-				aDebugger->WriteEnumItems(this, page_start - i, page_end - i);
+				aDebugger->WriteEnumItems(this, i - mFields.Length(), page_end - i);
 			}
 			else
 			{
