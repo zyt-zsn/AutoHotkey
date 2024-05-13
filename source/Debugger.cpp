@@ -2989,10 +2989,7 @@ void Debugger::PropertyWriter::_WriteProperty(ExprTokenType &aValue, IObject *aI
 		return;
 	PropertyInfo prop(mProp.fullname, mProp.value.buf);
 	if (aInvokee)
-	{
-		aInvokee->AddRef();
 		prop.invokee = aInvokee;
-	}
 	// Find the property's "relative" name at the end of the buffer:
 	prop.name = mProp.fullname.GetString() + mNameLength;
 	if (*prop.name == '.')
