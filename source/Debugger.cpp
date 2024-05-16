@@ -1212,6 +1212,9 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 			aDebugger->WriteProperty(vname.Contents(), value);
 		}
 
+		vname.Free();
+		vval.Free();
+
 		if (enum_method && i < page_end)
 		{
 			if (dynamic_cast<NativeFunc *>(enum_method))
