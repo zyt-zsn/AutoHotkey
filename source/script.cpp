@@ -3498,11 +3498,12 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			{
 				++parameter; // Remove '<'.
 				*parameter_end = '\0'; // Remove '>'.
-				bool error_was_shown, file_was_found;
 				// Save the working directory; see the similar line below for details.
 				LPTSTR prev_dir = GetWorkingDir();
-				// Attempt to include a script file from a Lib folder:
-				IncludeLibrary(parameter, parameter_end - parameter, error_was_shown, file_was_found);
+				// Attempt to find the script file in a Lib folder:
+				auto path = FindLibraryFile(parameter, parameter_end - parameter);
+				// Attempt to include the file if found:
+				bool error_was_shown = path && !LoadIncludedFile(path, false, ignore_load_failure);
 				// Restore the working directory.
 				if (prev_dir)
 				{
@@ -3510,7 +3511,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 					free(prev_dir);
 				}
 				// If any file was included, consider it a success; i.e. allow #include <lib> and #include <lib_func>.
-				if (!error_was_shown && (file_was_found || ignore_load_failure))
+				if (!error_was_shown && (path || ignore_load_failure))
 					return CONDITION_TRUE;
 				*parameter_end = '>'; // Restore '>' for display to the user.
 				return error_was_shown ? FAIL : ScriptError(_T("Script library not found."), aBuf);
@@ -6674,13 +6675,10 @@ void Script::InitFuncLibrary(FuncLibrary &aLib, LPTSTR aPathBase, LPTSTR aPathSu
 	aLib.length = length;
 }
 
-void Script::IncludeLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound)
-// Caller must ensure that aFuncName doesn't already exist as a defined function.
+LPTSTR Script::FindLibraryFile(LPTSTR aFuncName, size_t aFuncNameLength)
 // If aFuncNameLength is 0, the entire length of aFuncName is used.
+// Returns the path; valid only until the next call to this function.
 {
-	aErrorWasShown = false; // Set default for this output parameter.
-	aFileWasFound = false;
-
 	int i;
 	DWORD attr;
 
@@ -6693,14 +6691,12 @@ void Script::IncludeLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErr
 	if (!aFuncNameLength) // Caller didn't specify, so use the entire string.
 		aFuncNameLength = _tcslen(aFuncName);
 	if (aFuncNameLength > MAX_VAR_NAME_LENGTH) // Too long to fit in the allowed space, and also too long to be a valid function name.
-		return;
+		return nullptr;
 
-	TCHAR *dest, *first_underscore, class_name_buf[MAX_VAR_NAME_LENGTH + 1];
+	TCHAR *dest;
 	LPTSTR naked_filename = aFuncName;               // Set up for the first iteration.
 	size_t naked_filename_length = aFuncNameLength; //
 
-	for (int second_iteration = 0; second_iteration < 2; ++second_iteration)
-	{
 		for (i = 0; i < FUNC_LIB_COUNT; ++i)
 		{
 			if (!*sLib[i].path) // Library is marked disabled, so skip it.
@@ -6712,35 +6708,17 @@ void Script::IncludeLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErr
 			attr = GetFileAttributes(sLib[i].path); // Testing confirms that GetFileAttributes() doesn't support wildcards; which is good because we want filenames containing question marks to be "not found" rather than being treated as a match-pattern.
 			if (attr == 0xFFFFFFFF || (attr & FILE_ATTRIBUTE_DIRECTORY)) // File doesn't exist or it's a directory.
 				continue;
-			// Since above didn't "continue", a file exists whose name matches that of the requested function.
-			aFileWasFound = true; // Indicate success for #include <lib>, which doesn't necessarily expect a function to be found.
 
-			// Fix for v1.1.06.00: If the file contains any lib #includes, it must be loaded AFTER the
-			// above writes sLib[i].path to the iLib file, otherwise the wrong filename could be written.
-			if (!LoadIncludedFile(sLib[i].path, false, false)) // Fix for v1.0.47.05: Pass false for allow-dupe because otherwise, it's possible for a stdlib file to attempt to include itself (especially via the LibNamePrefix_ method) and thus give a misleading "duplicate function" vs. "func does not exist" error message.  Obsolete: For performance, pass true for allow-dupe so that it doesn't have to check for a duplicate file (seems too rare to worry about duplicates since by definition, the function doesn't yet exist so it's file shouldn't yet be included).
-				aErrorWasShown = true; // Above has just displayed its error (e.g. syntax error in a line, failed to open the include file, etc).  So override the default set earlier.
-			
-			return; // A file was found, so look no further.
+			// Since above didn't "continue", a file exists whose name matches that of the requested library.
+			return sLib[i].path; // Only valid until the next call to this function.
 		} // for() each library directory.
 
-		// Now that the first iteration is done, set up for the second one that searches by class/prefix.
-		// Notes about ambiguity and naming collisions:
-		// By the time it gets to the prefix/class search, it's almost given up.  Even if it wrongly finds a
-		// match in a filename that isn't really a class, it seems inconsequential because at worst it will
-		// still not find the function and will then say "call to nonexistent function".  In addition, the
-		// ability to customize which libraries are searched is planned.  This would allow a publicly
-		// distributed script to turn off all libraries except stdlib.
-		if (   !(first_underscore = _tcschr(aFuncName, '_'))   ) // No second iteration needed.
-			break; // All loops are done because second iteration is the last possible attempt.
-		naked_filename_length = first_underscore - aFuncName;
-		if (naked_filename_length >= _countof(class_name_buf)) // Class name too long (probably impossible currently).
-			break; // All loops are done because second iteration is the last possible attempt.
-		naked_filename = class_name_buf; // Point it to a buffer for use below.
-		tmemcpy(naked_filename, aFuncName, naked_filename_length);
-		naked_filename[naked_filename_length] = '\0';
-	} // 2-iteration for().
-
-	// Since above didn't return, no match found in any library.
+	// The legacy behaviour for #Include <A_B> is that all Libs are searched for A_B.ahk before
+	// searching for A.ahk, which means that A_B.ahk takes precedence over A.ahk even if A.ahk
+	// is defined in the local Lib and A_B.ahk is not.
+	if (auto first_underscore = _tcschr(aFuncName, '_'))
+		return FindLibraryFile(aFuncName, first_underscore - aFuncName);
+	return nullptr;
 }
 
 #endif
