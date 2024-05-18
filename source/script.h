@@ -2139,9 +2139,9 @@ private:
 	FuncList mFuncs;
 
 	ScriptModuleList mModules;
-	ScriptModule mBuiltinModule;
+	ScriptModule mBuiltinModule { _T("AHK"), nullptr };
 	ScriptImport mDefaultImport { &mBuiltinModule };
-	ScriptModule mDefaultModule { _T("__Main"), mDefaultImport };
+	ScriptModule mDefaultModule { _T("__Main"), &mDefaultImport };
 	ScriptModule *mCurrentModule = &mBuiltinModule;
 	ScriptModule *mLastModule = nullptr;
 	

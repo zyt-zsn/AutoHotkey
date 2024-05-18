@@ -40,11 +40,8 @@ public:
 	ResultType AddFileIndex(FileIndexType aFile);
 
 	ScriptModule() {}
-	ScriptModule(LPCTSTR aName, ScriptImport &aDefaultImport)
-	{
-		mName = SimpleHeap::Alloc(aName);
-		mImports = &aDefaultImport;
-	}
+	ScriptModule(LPCTSTR aName, ScriptImport *aDefaultImport)
+		: mName(aName), mImports(aDefaultImport) {}
 
 	void *operator new(size_t aBytes) {return SimpleHeap::Alloc(aBytes);}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Alloc(aBytes);}

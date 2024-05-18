@@ -566,8 +566,9 @@ ResultType Script::Init(LPTSTR aScriptFilename, IObject *aArgs)
 	// Up to this point, mCurrentModule == &mBuiltinModule for initialization of built-ins.
 	// From this point, declarations should add names to a script module, not mBuiltinModule.
 	mCurrentModule = &mDefaultModule;
-	mModules.Insert(&mDefaultModule, 0);
-	ASSERT(mModules.mCount == 1);
+	mModules.Insert(&mDefaultModule, 0); // __Main
+	mModules.Insert(&mBuiltinModule, 1); // AHK
+	ASSERT(mModules.mCount == 2);
 
 	if (aArgs) // Caller-provided command-line args.
 	{
@@ -7392,7 +7393,7 @@ Var *Script::FindOrAddBuiltInVar(LPCTSTR aVarName, VarEntry *aVarEntry)
 	LPTSTR name = SimpleHeap::Malloc(aVarName);
 	if (!name)
 		return nullptr;
-	Var *the_new_var = new Var(name, aVarEntry, VAR_DECLARE_GLOBAL);
+	Var *the_new_var = new Var(name, aVarEntry, VAR_DECLARE_GLOBAL | VAR_EXPORTED);
 	if (!the_new_var || !mBuiltinModule.mVars.Insert(the_new_var, insert_pos))
 	{
 		MemoryError();

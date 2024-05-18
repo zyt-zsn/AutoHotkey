@@ -30,7 +30,8 @@ ResultType Script::ParseModuleDirective(LPCTSTR aName)
 	if (mModules.Find(aName, &at))
 		return ScriptError(ERR_DUPLICATE_DECLARATION, aName);
 	// TODO: Validate module names.
-	auto mod = new ScriptModule(aName, mDefaultImport);
+	aName = SimpleHeap::Alloc(aName);
+	auto mod = new ScriptModule(aName, &mDefaultImport);
 	if (!mModules.Insert(mod, at))
 		return FAIL;
 	CloseCurrentModule();
@@ -151,7 +152,7 @@ ResultType Script::ResolveImports(ScriptImport &imp)
 			auto cur_mod = mCurrentModule;
 			auto last_mod = mLastModule;
 			mLastModule = nullptr; // Start a new chain.
-			imp.mod = mCurrentModule = new ScriptModule(mod_name, mDefaultImport);
+			imp.mod = mCurrentModule = new ScriptModule(mod_name, &mDefaultImport);
 			if (!LoadIncludedFile(path, false, false))
 				return FAIL;
 			if (!CloseCurrentModule())
