@@ -2329,7 +2329,7 @@ public:
 	};
 	void InitFuncLibraries(FuncLibrary aLibs[]);
 	void InitFuncLibrary(FuncLibrary &aLib, LPTSTR aPathBase, LPTSTR aPathSuffix);
-	LPTSTR FindLibraryFile(LPTSTR aName, size_t aNameLength);
+	LPTSTR FindLibraryFile(LPTSTR aName, size_t aNameLength, bool aIsModule = false);
 #endif
 	Func *FindGlobalFunc(LPCTSTR aFuncName, size_t aFuncNameLength = 0);
 	static Func *GetBuiltInFunc(LPTSTR aFuncName);

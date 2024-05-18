@@ -6675,7 +6675,7 @@ void Script::InitFuncLibrary(FuncLibrary &aLib, LPTSTR aPathBase, LPTSTR aPathSu
 	aLib.length = length;
 }
 
-LPTSTR Script::FindLibraryFile(LPTSTR aFuncName, size_t aFuncNameLength)
+LPTSTR Script::FindLibraryFile(LPTSTR aFuncName, size_t aFuncNameLength, bool aIsModule)
 // If aFuncNameLength is 0, the entire length of aFuncName is used.
 // Returns the path; valid only until the next call to this function.
 {
@@ -6712,6 +6712,9 @@ LPTSTR Script::FindLibraryFile(LPTSTR aFuncName, size_t aFuncNameLength)
 			// Since above didn't "continue", a file exists whose name matches that of the requested library.
 			return sLib[i].path; // Only valid until the next call to this function.
 		} // for() each library directory.
+
+	if (aIsModule)
+		return nullptr;
 
 	// The legacy behaviour for #Include <A_B> is that all Libs are searched for A_B.ahk before
 	// searching for A.ahk, which means that A_B.ahk takes precedence over A.ahk even if A.ahk

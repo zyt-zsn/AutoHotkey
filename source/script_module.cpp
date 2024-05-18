@@ -145,7 +145,25 @@ ResultType Script::ResolveImports(ScriptImport &imp)
 	}
 
 	if (  !(imp.mod = mModules.Find(mod_name))  )
-		return ScriptError(_T("Module not found"), mod_name);
+	{
+		if (auto path = FindLibraryFile(mod_name, _tcslen(mod_name), true))
+		{
+			auto cur_mod = mCurrentModule;
+			auto last_mod = mLastModule;
+			mLastModule = nullptr; // Start a new chain.
+			imp.mod = mCurrentModule = new ScriptModule(mod_name, mDefaultImport);
+			if (!LoadIncludedFile(path, false, false))
+				return FAIL;
+			if (!CloseCurrentModule())
+				return FAIL;
+			if (!ResolveImports()) // Resolve imports in all modules that were just included.
+				return FAIL;
+			imp.mod->mPrev = last_mod; // Join to previous chain.
+			mCurrentModule = cur_mod;
+		}
+		else
+			return ScriptError(_T("Module not found"), mod_name);
+	}
 
 	if (var_name)
 	{
