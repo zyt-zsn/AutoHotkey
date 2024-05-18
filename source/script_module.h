@@ -28,12 +28,16 @@ public:
 	ScriptModule *mPrev = nullptr;
 	VarList mVars;
 	Var *mSelf = nullptr;
+	FileIndexType *mFiles = nullptr, mFilesCount = 0, mFilesCountMax = 0;
 	bool mExecuted = false;
 
 	// #Warn settings
 	WarnMode Warn_LocalSameAsGlobal = WARNMODE_OFF;
 	WarnMode Warn_Unreachable = WARNMODE_MSGBOX;
 	WarnMode Warn_VarUnset = WARNMODE_MSGBOX;
+
+	bool HasFileIndex(FileIndexType aFile);
+	ResultType AddFileIndex(FileIndexType aFile);
 
 	ScriptModule() {}
 	ScriptModule(LPCTSTR aName, ScriptImport &aDefaultImport)

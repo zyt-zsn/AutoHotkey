@@ -218,3 +218,28 @@ ResultType Script::CloseCurrentModule()
 	mLastLine = nullptr;
 	return OK;
 }
+
+
+bool ScriptModule::HasFileIndex(FileIndexType aFile)
+{
+	for (int i = 0; i < mFilesCount; ++i)
+		if (mFiles[i] == aFile)
+			return true;
+	return false;
+}
+
+
+ResultType ScriptModule::AddFileIndex(FileIndexType aFile)
+{
+	if (mFilesCount == mFilesCountMax)
+	{
+		auto new_size = mFilesCount ? mFilesCount * 2 : 8;
+		auto new_files = (FileIndexType*)realloc(mFiles, new_size * sizeof(FileIndexType));
+		if (!new_files)
+			return MemoryError();
+		mFiles = new_files;
+		mFilesCountMax = new_size;
+	}
+	mFiles[mFilesCount++] = aFile;
+	return OK;
+}

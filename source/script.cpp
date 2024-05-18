@@ -1596,7 +1596,8 @@ ResultType Script::OpenIncludedFile(TextStream *&ts, LPCTSTR aFileSpec, bool aAl
 	TCHAR full_path[T_MAX_PATH];
 
 	int source_file_index = Line::sSourceFileCount;
-	if (!source_file_index && *aFileSpec != '*')
+	bool is_first_source_file = !source_file_index;
+	if (is_first_source_file && *aFileSpec != '*')
 		// Since this is the first source file, it must be the main script file.  Just point it to the
 		// location of the filespec already dynamically allocated:
 		Line::sSourceFile[source_file_index] = mFileSpec;
@@ -1613,15 +1614,19 @@ ResultType Script::OpenIncludedFile(TextStream *&ts, LPCTSTR aFileSpec, bool aAl
 		else
 			GetFullPathName(aFileSpec, _countof(full_path), full_path, &filename_marker);
 		// Check if this file was already included.  If so, it's not an error because we want
-		// to support automatic "include once" behavior.  So just ignore repeats:
-		if (!aAllowDuplicateInclude)
-			for (int f = 0; f < source_file_index; ++f) // Here, source_file_index==Line::sSourceFileCount
-				if (!ostrcmpi(Line::sSourceFile[f], full_path)) // Case insensitive like the file system (e.g. "Ä" == "ä" in the NTFS).
-					return OK;
+		// to support automatic "include once" behavior.  So ignore repeats if requested by the
+		// caller, otherwise reuse the file index and allocated path:
+		for (source_file_index = 0; source_file_index < Line::sSourceFileCount; ++source_file_index)
+			if (!ostrcmpi(Line::sSourceFile[source_file_index], full_path)) // Case insensitive like the file system (e.g. "Ä" == "ä" in the NTFS).
+				break;
 		// The path is copied into persistent memory further below, after the file has been opened,
 		// in case the opening fails and aIgnoreLoadFailure==true.  Initialize for the check below.
-		Line::sSourceFile[source_file_index] = NULL;
+		Line::sSourceFile[Line::sSourceFileCount] = NULL;
 	}
+
+	bool is_duplicate = mCurrentModule->HasFileIndex(source_file_index);
+	if (is_duplicate && !aAllowDuplicateInclude)
+		return OK;
 
 	LPCTSTR filespec_to_open = aFileSpec;
 	UINT codepage = g_DefaultScriptCodepage;
@@ -1655,10 +1660,13 @@ ResultType Script::OpenIncludedFile(TextStream *&ts, LPCTSTR aFileSpec, bool aAl
 	// This is done only after the file has been successfully opened in case aIgnoreLoadFailure==true:
 	if (!Line::sSourceFile[source_file_index])
 		Line::sSourceFile[source_file_index] = SimpleHeap::Alloc(full_path);
-	//else the first file was already taken care of by another means.
-	++Line::sSourceFileCount;
+	if (source_file_index == Line::sSourceFileCount)
+		++Line::sSourceFileCount;
+	if (!is_duplicate)
+		if (!mCurrentModule->AddFileIndex(source_file_index))
+			return FAIL;
 
-	if (!source_file_index)
+	if (is_first_source_file)
 	{
 		// Load any pre-script resource.
 		if (FindResource(NULL, SCRIPT_PRESOURCE_NAME, RT_RCDATA)
@@ -1670,6 +1678,9 @@ ResultType Script::OpenIncludedFile(TextStream *&ts, LPCTSTR aFileSpec, bool aAl
 			&& !LoadIncludedFile(mCmdLineInclude, false, false))
 			return FAIL;
 	}
+
+	// Set after recursive calls above.
+	mCurrFileIndex = source_file_index;
 	
 	// Set the working directory so that any #Include directives are relative to the directory
 	// containing this file by default.  Call SetWorkingDir() vs. SetCurrentDirectory() so that it
@@ -1724,11 +1735,10 @@ ResultType Script::OpenIncludedFile(TextStream *&ts, LPCTSTR aFileSpec, bool aAl
 ResultType Script::LoadIncludedFile(LPCTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure)
 // Returns OK or FAIL.
 {
-	int source_file_index = Line::sSourceFileCount; // Set early in case of >PRESCRIPT<.
 	TextStream *ts = nullptr;
 	ResultType result = OpenIncludedFile(ts, aFileSpec, aAllowDuplicateInclude, aIgnoreLoadFailure);
 	if (result == CONDITION_TRUE)
-		result = LoadIncludedFile(ts, source_file_index);
+		result = LoadIncludedFile(ts);
 	if (ts)
 		delete ts;
 	return result;
@@ -1736,12 +1746,12 @@ ResultType Script::LoadIncludedFile(LPCTSTR aFileSpec, bool aAllowDuplicateInclu
 
 
 
-ResultType Script::LoadIncludedFile(TextStream *fp, int aFileIndex)
+ResultType Script::LoadIncludedFile(TextStream *fp)
 // Returns OK or FAIL.
 {
 	// Keep this var on the stack due to recursion, which allows newly created lines to be given the
 	// correct file number even when some #include's have been encountered in the middle of the script:
-	int source_file_index = aFileIndex;
+	int source_file_index = mCurrFileIndex;
 
 	bool blocks_previously_open = mLineParent || mClassObjectCount; // For error detection.
 
@@ -1755,9 +1765,6 @@ ResultType Script::LoadIncludedFile(TextStream *fp, int aFileIndex)
 	LPTSTR hotkey_flag, hotstring_start, hotstring_options;
 	bool hotstring_execute;
 	ResultType hotkey_validity;
-
-	// Init both for main file and any included files loaded by this function:
-	mCurrFileIndex = source_file_index;  // source_file_index is kept on the stack due to recursion (from #include).
 
 #ifdef AUTOHOTKEYSC
 	// -1 (MAX_UINT in this case) to compensate for the fact that there is a comment containing
