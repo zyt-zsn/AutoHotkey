@@ -6775,12 +6775,10 @@ T *ScriptItemList<T, S>::Find(LPCTSTR aName, size_t aNameLength, int *apInsertPo
 
 
 
-Func *Script::FindGlobalFunc(LPCTSTR aFuncName, size_t aFuncNameLength)
+IObject *Script::GetBuiltinObject(LPCTSTR aName)
 {
-	if (Var *var = FindGlobalVar(aFuncName, aFuncNameLength))
-		if (var->Type() == VAR_CONSTANT)
-			return dynamic_cast<Func *>(var->ToObject());
-	return nullptr;
+	auto var = FindOrAddBuiltInVar(aName, true, nullptr);
+	return var ? var->ToObject() : nullptr;
 }
 
 

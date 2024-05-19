@@ -151,7 +151,10 @@ public:
 	{
 		if (index->vt != VT_BSTR)
 			return DISP_E_TYPEMISMATCH;
-		auto func = g_script.FindGlobalFunc(index->bstrVal);
+		auto var = g_script.FindGlobalVar(index->bstrVal); // FIXME: Module support.
+		if (!var)
+			return DISP_E_BADINDEX;
+		auto func = dynamic_cast<Func*>(var->ToObject());
 		if (!func)
 			return DISP_E_BADINDEX;
 		value->vt = VT_DISPATCH;
@@ -490,7 +493,7 @@ public:
 	{
 		if (index->vt != VT_BSTR)
 			return DISP_E_TYPEMISMATCH;
-		Label *label = g_script.FindLabel(index->bstrVal); // FIXME: Collection is for default module, but this searches current module.
+		Label *label = g_script.FindLabel(index->bstrVal); // FIXME: Module support.
 		if (!label)
 			return DISP_E_BADINDEX;
 		value->vt = VT_DISPATCH;
@@ -499,7 +502,7 @@ public:
 
 	STDMETHODIMP get_Count(int *pCount)
 	{
-		*pCount = g_script.mLabelCount; // FIXME: Collection is for default module's global labels, but this counts all labels everywhere.
+		*pCount = g_script.mLabelCount; // FIXME: This counts all labels, not just those available in this collection.
 		return S_OK;
 	}
 

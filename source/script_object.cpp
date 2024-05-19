@@ -3678,11 +3678,11 @@ void Object::CreateRootPrototypes()
 	// only handles Objects, and these must handle primitive values.
 	static const LPTSTR sFuncs[] = { _T("GetMethod"), _T("HasBase"), _T("HasMethod"), _T("HasProp") };
 	for (int i = 0; i < _countof(sFuncs); ++i)
-		sAnyPrototype->DefineMethod(sFuncs[i], g_script.FindGlobalFunc(sFuncs[i]));
+		sAnyPrototype->DefineMethod(sFuncs[i], g_script.GetBuiltinObject(sFuncs[i]));
 	auto prop = sAnyPrototype->DefineProperty(_T("Base"), false);
 	prop->NoParamGet = prop->NoParamSet = true;
-	prop->SetGetter(g_script.FindGlobalFunc(_T("ObjGetBase")));
-	prop->SetSetter(g_script.FindGlobalFunc(_T("ObjSetBase")));
+	prop->SetGetter(g_script.GetBuiltinObject(_T("ObjGetBase")));
+	prop->SetSetter(g_script.GetBuiltinObject(_T("ObjSetBase")));
 	
 	// Define __Init so that Script::DefineClassInit can add an unconditional super.__Init().
 	static auto __Init = new BuiltInFunc { _T(""), Any___Init, 1, 1 };

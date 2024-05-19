@@ -2331,7 +2331,7 @@ public:
 	void InitFuncLibrary(FuncLibrary &aLib, LPTSTR aPathBase, LPTSTR aPathSuffix);
 	LPTSTR FindLibraryFile(LPTSTR aName, size_t aNameLength, bool aIsModule = false);
 #endif
-	Func *FindGlobalFunc(LPCTSTR aFuncName, size_t aFuncNameLength = 0);
+	IObject *GetBuiltinObject(LPCTSTR aName);
 	static Func *GetBuiltInFunc(LPCTSTR aFuncName);
 	static Func *GetBuiltInMdFunc(LPCTSTR aFuncName);
 	UserFunc *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, FuncDefType aIsInExpression = FuncDefNormal, Object *aClassObject = nullptr);
