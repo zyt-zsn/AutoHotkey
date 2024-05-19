@@ -306,6 +306,13 @@ int Debugger::ProcessCommands(LPCSTR aBreakReason)
 		if (err = EnterBreakState(aBreakReason))
 			return err;
 	mProcessingCommands = true;
+	// Set a non-zero ExcptMode so that UnhandledException will be called for runtime
+	// errors, and use EXCPTMODE_DEBUGGER so that UnhandledException will immediately
+	// free the exception and return FAIL without doing any reporting.
+	// Any ExcptMode flags of the interrupted thread don't apply to code executed by the
+	// debugger, since it isn't executing within or being called by the current block.
+	auto excptmode = g->ExcptMode;
+	g->ExcptMode = EXCPTMODE_DEBUGGER;
 
 	// Disable notification of READ readiness and reset socket to synchronous mode.
 	u_long zero = 0;
@@ -405,6 +412,7 @@ int Debugger::ProcessCommands(LPCSTR aBreakReason)
 	}
 	ASSERT(mInternalState != DIS_Break);
 	mProcessingCommands = false;
+	g->ExcptMode = excptmode;
 	// Register for message-based notification of data arrival.  If a command
 	// is received asynchronously, control will be passed back to the debugger
 	// to process it.  This allows the debugger engine to respond even if the
@@ -3080,16 +3088,9 @@ void Debugger::PropertyWriter::WriteBaseProperty(IObject *aBase)
 void Debugger::PropertyWriter::WriteDynamicProperty(LPTSTR aName)
 {
 	FuncResult result_token;
-	auto excpt_mode = g->ExcptMode;
-	g->ExcptMode |= EXCPTMODE_CATCH;
 	auto result = mProp.invokee->Invoke(result_token, IT_GET, aName, mProp.value, nullptr, 0);
-	g->ExcptMode = excpt_mode;
 	if (!result)
-	{
-		if (g->ThrownToken)
-			g_script.FreeExceptionToken(g->ThrownToken);
 		result_token.SetValue(_T("<error>"), 7);
-	}
 	mDbg.AppendPropertyName(mProp.fullname, mNameLength, CStringUTF8FromTChar(aName));
 	_WriteProperty(result_token);
 	result_token.Free();
@@ -3102,10 +3103,7 @@ void Debugger::PropertyWriter::_WriteProperty(ExprTokenType &aValue, IObject *aI
 		return;
 	PropertyInfo prop(mProp.fullname, mProp.value.buf);
 	if (aInvokee)
-	{
-		aInvokee->AddRef();
 		prop.invokee = aInvokee;
-	}
 	// Find the property's "relative" name at the end of the buffer:
 	prop.name = mProp.fullname.GetString() + mNameLength;
 	if (*prop.name == '.')
