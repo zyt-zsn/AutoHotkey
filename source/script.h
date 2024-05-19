@@ -2368,8 +2368,9 @@ public:
 	// Alias to improve clarity and reduce code size (if compiler chooses not to inline; due to how parameter defaults work):
 	Var *FindGlobalVar(LPCTSTR aVarName, size_t aVarNameLength = 0) { return FindVar(aVarName, aVarNameLength, FINDVAR_GLOBAL | FINDVAR_GLOBAL_FALLBACK); }
 
-	VarList *GlobalVars() { return &(g->CurrentFunc ? g->CurrentFunc->mModule : mCurrentModule)->mVars; }
+	VarList *GlobalVars() { return &CurrentModule()->mVars; }
 	
+	ScriptModule *CurrentModule() { return g->CurrentFunc ? g->CurrentFunc->mModule : mCurrentModule; }
 	ResultType ParseModuleDirective(LPCTSTR aName);
 	ResultType ParseImportStatement(LPTSTR aBuf);
 	ResultType CloseCurrentModule();
