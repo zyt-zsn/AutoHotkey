@@ -206,6 +206,7 @@ ResultType Script::ResolveImports(ScriptImport &imp)
 				cp = find_identifier_end(var_name);
 				c = *cp;
 				*cp = '\0';
+				while (IS_SPACE_OR_TAB(c)) c = *++cp; // Find next non-whitespace.
 			}
 			if (!(c == ',' || c == '}'))
 			{
