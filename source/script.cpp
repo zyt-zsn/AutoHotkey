@@ -308,7 +308,7 @@ Script::Script()
 	, mThisHotkeyName(_T("")), mPriorHotkeyName(_T("")), mThisHotkeyStartTime(0), mPriorHotkeyStartTime(0)
 	, mEndChar(0), mThisHotkeyModifiersLR(0)
 	, mOnClipboardChangeIsRunning(false)
-	, mFirstLabel(NULL), mLastLabel(NULL)
+	, mLastLabel(NULL)
 	, mFirstTimer(NULL), mLastTimer(NULL), mTimerEnabledCount(0), mTimerCount(0)
 	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0)
 	, mNextLineIsFunctionBody(false)
@@ -4096,12 +4096,7 @@ Label *Script::FindLabel(LPCTSTR aLabelName)
 // a match is found.
 {
 	if (!aLabelName || !*aLabelName) return NULL;
-	Label *label;
-	if (g->CurrentFunc)
-		label = g->CurrentFunc->mFirstLabel; // Search only local labels, since global labels aren't valid jump targets in this case.
-	else
-		label = mFirstLabel;
-	for ( ; label; label = label->mNextLabel)
+	for (auto label = CurrentFirstLabel(); label; label = label->mNextLabel)
 		if (!_tcsicmp(label->mName, aLabelName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 			return label; // Match found.
 	return NULL; // No match found.
@@ -4114,7 +4109,7 @@ ResultType Script::AddLabel(LPTSTR aLabelName, bool aAllowDupe)
 {
 	if (!*aLabelName)
 		return FAIL; // For now, silent failure because callers should check this beforehand.
-	Label *&first_label = g->CurrentFunc ? g->CurrentFunc->mFirstLabel : mFirstLabel;
+	Label *&first_label = g->CurrentFunc ? g->CurrentFunc->mFirstLabel : mCurrentModule->mFirstLabel;
 	Label *&last_label  = g->CurrentFunc ? g->CurrentFunc->mLastLabel  : mLastLabel;
 	if (!aAllowDupe && FindLabel(aLabelName))
 	{
@@ -7867,9 +7862,10 @@ ResultType Script::PreparseCatchClass(Line *aLine)
 
 bool Script::IsLabelTarget(Line *aLine)
 {
-	Label *lbl = g->CurrentFunc ? g->CurrentFunc->mFirstLabel : mFirstLabel;
-	for ( ; lbl && lbl->mJumpToLine != aLine; lbl = lbl->mNextLabel);
-	return lbl;
+	for (auto lbl = CurrentFirstLabel(); lbl; lbl = lbl->mNextLabel)
+		if (lbl->mJumpToLine == aLine)
+			return true;
+	return false;
 }
 
 

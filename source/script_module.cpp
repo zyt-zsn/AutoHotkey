@@ -240,6 +240,7 @@ ResultType Script::CloseCurrentModule()
 	mCurrentModule->mFirstLine = mFirstLine;
 	mFirstLine = nullptr; // Start a new linked list of lines.
 	mLastLine = nullptr;
+	mLastLabel = nullptr; // Start a new linked list of labels.
 	return OK;
 }
 

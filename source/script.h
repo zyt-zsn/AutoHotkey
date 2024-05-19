@@ -2132,7 +2132,7 @@ private:
 #define FDE_SUBSTITUTE_STRING_LENGTH (_countof(FDE_SUBSTITUTE_STRING)-1)
 
 	Line *mFirstLine, *mLastLine;     // The first and last lines in the linked list.
-	Label *mFirstLabel, *mLastLabel;  // The first and last labels in the linked list.
+	Label *mLastLabel;  // The last defined label.
 #ifdef CONFIG_DLL
 	int mLabelCount;
 #endif
@@ -2222,6 +2222,7 @@ private:
 	ResultType PreparseCatchVar(Line *aLine);
 	ResultType PreparseCatchClass(Line *aLine);
 	bool IsLabelTarget(Line *aLine);
+	Label *CurrentFirstLabel() { return g->CurrentFunc ? g->CurrentFunc->mFirstLabel : mCurrentModule->mFirstLabel; }
 
 public:
 	Line *mCurrLine;     // Seems better to make this public than make Line our friend.

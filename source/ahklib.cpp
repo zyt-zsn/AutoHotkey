@@ -458,7 +458,7 @@ class EnumLabels : public EnumVARIANT
 	Label *mCurrLabel;
 
 public:
-	EnumLabels() : EnumVARIANT(), mCurrLabel(g_script.mFirstLabel) {}
+	EnumLabels() : EnumVARIANT(), mCurrLabel(g_script.mDefaultModule.mFirstLabel) {}
 
 	STDMETHODIMP Next(ULONG celt, /*out*/ VARIANT *rgVar, /*out*/ ULONG *pCeltFetched)
 	{
@@ -490,7 +490,7 @@ public:
 	{
 		if (index->vt != VT_BSTR)
 			return DISP_E_TYPEMISMATCH;
-		Label *label = g_script.FindLabel(index->bstrVal);
+		Label *label = g_script.FindLabel(index->bstrVal); // FIXME: Collection is for default module, but this searches current module.
 		if (!label)
 			return DISP_E_BADINDEX;
 		value->vt = VT_DISPATCH;
@@ -499,7 +499,7 @@ public:
 
 	STDMETHODIMP get_Count(int *pCount)
 	{
-		*pCount = g_script.mLabelCount;
+		*pCount = g_script.mLabelCount; // FIXME: Collection is for default module's global labels, but this counts all labels everywhere.
 		return S_OK;
 	}
 
