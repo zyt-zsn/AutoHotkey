@@ -28,7 +28,7 @@ MdFuncEntry sMdFunc[]
 };
 
 
-Func *Script::GetBuiltInMdFunc(LPTSTR aFuncName)
+Func *Script::GetBuiltInMdFunc(LPCTSTR aFuncName)
 {
 #ifdef _DEBUG
 	static bool sChecked = false;

@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "script.h"
+#include "globaldata.h"
 
 
 Object *ScriptModule::sPrototype;
@@ -8,6 +9,9 @@ Object *ScriptModule::sPrototype;
 ResultType ScriptModule::Invoke(IObject_Invoke_PARAMS_DECL)
 {
 	auto var = aName ? mVars.Find(aName) : nullptr;
+	if (!var && mIsBuiltinModule)
+		// This is a slight hack to support built-in vars which haven't been referenced directly.
+		var = g_script.FindOrAddBuiltInVar(aName, true, nullptr);
 	if (!var || !var->IsExported())
 		return ObjectBase::Invoke(IObject_Invoke_PARAMS);
 
@@ -31,7 +35,7 @@ ResultType Script::ParseModuleDirective(LPCTSTR aName)
 		return ScriptError(ERR_DUPLICATE_DECLARATION, aName);
 	// TODO: Validate module names.
 	aName = SimpleHeap::Alloc(aName);
-	auto mod = new ScriptModule(aName, &mDefaultImport);
+	auto mod = new ScriptModule(aName);
 	if (!mModules.Insert(mod, at))
 		return FAIL;
 	CloseCurrentModule();
@@ -152,7 +156,7 @@ ResultType Script::ResolveImports(ScriptImport &imp)
 			auto cur_mod = mCurrentModule;
 			auto last_mod = mLastModule;
 			mLastModule = nullptr; // Start a new chain.
-			imp.mod = mCurrentModule = new ScriptModule(mod_name, &mDefaultImport);
+			imp.mod = mCurrentModule = new ScriptModule(mod_name);
 			if (!LoadIncludedFile(path, false, false))
 				return FAIL;
 			if (!CloseCurrentModule())

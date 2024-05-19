@@ -30,6 +30,7 @@ public:
 	Var *mSelf = nullptr;
 	FileIndexType *mFiles = nullptr, mFilesCount = 0, mFilesCountMax = 0;
 	bool mExecuted = false;
+	bool mIsBuiltinModule = false;
 
 	// #Warn settings
 	WarnMode Warn_LocalSameAsGlobal = WARNMODE_OFF;
@@ -40,8 +41,7 @@ public:
 	ResultType AddFileIndex(FileIndexType aFile);
 
 	ScriptModule() {}
-	ScriptModule(LPCTSTR aName, ScriptImport *aDefaultImport)
-		: mName(aName), mImports(aDefaultImport) {}
+	ScriptModule(LPCTSTR aName) : mName(aName) {}
 
 	void *operator new(size_t aBytes) {return SimpleHeap::Alloc(aBytes);}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Alloc(aBytes);}

@@ -332,6 +332,8 @@ Script::Script()
 	// initial Sleep(10) in ExecUntil that would otherwise occur.
 	ZeroMemory(&mNIC, sizeof(mNIC));  // Constructor initializes this, to be safe.
 	mNIC.hWnd = NULL;  // Set this as an indicator that it tray icon is not installed.
+
+	mBuiltinModule.mIsBuiltinModule = true;
 	
 	// This is done here rather than in Init() because by then CreateRootPrototypes()
 	// definitely would have already caused functions to be added to the list.
@@ -6800,7 +6802,7 @@ BuiltInFunc::BuiltInFunc(FuncEntry &bif) : BuiltInFunc(bif.mName)
 
 
 
-Func *Script::GetBuiltInFunc(LPTSTR aFuncName)
+Func *Script::GetBuiltInFunc(LPCTSTR aFuncName)
 {
 	int left, right, mid, result;
 	for (left = 0, right = _countof(g_BIF) - 1; left <= right;)
@@ -7175,26 +7177,9 @@ Var *Script::FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 		if (apList) *apList = varlist;
 		if (apInsertPos) *apInsertPos = insert_pos;
 
-		if (aScope & FINDVAR_GLOBAL_FALLBACK) // Declarations shadow imported names and built-in functions.
-		{
+		if (aScope & FINDVAR_GLOBAL_FALLBACK) // Declarations shadow imported names.
 			if (Var *found = FindImportedVar(var_name))
 				return found;
-
-			if (auto *func = GetBuiltInFunc(var_name))
-			{
-				Var *var = AddVar(var_name, aVarNameLength, varlist, insert_pos, VAR_DECLARE_GLOBAL | ADDVAR_NO_VALIDATE);
-				if (!var)
-				{
-					if (aDisplayError)
-						*aDisplayError = FAIL;
-					func->Release();
-					return nullptr;
-				}
-				var->AssignSkipAddRef(func);
-				var->MakeReadOnly();
-				return var;
-			}
-		}
 	}
 
 	// Since no match was found, if this is a local fall back to searching outer functions and the
@@ -7218,14 +7203,7 @@ Var *Script::FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 				return found;
 	}
 	// Otherwise, since above didn't return:
-	if (auto *builtin = GetBuiltInVar(var_name))
-	{
-		Var *var = FindOrAddBuiltInVar(var_name, builtin);
-		if (!var && aDisplayError)
-			*aDisplayError = FAIL;
-		return var;
-	}
-	return nullptr;
+	return FindOrAddBuiltInVar(var_name, aScope & FINDVAR_GLOBAL_FALLBACK, aDisplayError);
 }
 
 
@@ -7385,21 +7363,44 @@ Var *Script::AddVar(LPCTSTR aVarName, size_t aVarNameLength, VarList *aList, int
 
 
 
-Var *Script::FindOrAddBuiltInVar(LPCTSTR aVarName, VarEntry *aVarEntry)
+Var *Script::FindOrAddBuiltInVar(LPCTSTR aVarName, bool aAllowFunc, ResultType *aDisplayError)
 {
+	// mBuiltinModule currently isn't handled via mCurrentModule->mImports because we would
+	// still need to call Find() to get insert_pos if a BIV must be added, and then there's
+	// the question of what to do if a non-null value is returned even though the caller
+	// should have found it via mImports and thereby prevented this call.
 	int insert_pos;
-	if (Var *found = mBuiltinModule.mVars.Find(aVarName, &insert_pos))
-		return found;
-	LPTSTR name = SimpleHeap::Malloc(aVarName);
-	if (!name)
-		return nullptr;
-	Var *the_new_var = new Var(name, aVarEntry, VAR_DECLARE_GLOBAL | VAR_EXPORTED);
-	if (!the_new_var || !mBuiltinModule.mVars.Insert(the_new_var, insert_pos))
+	Var *var = mBuiltinModule.mVars.Find(aVarName, &insert_pos);
+	if (var)
+		return var;
+
+	Func *func = nullptr;
+	if (auto biv = GetBuiltInVar(aVarName))
 	{
-		MemoryError();
+		if (auto name = SimpleHeap::Malloc(aVarName))
+			var = new Var(name, biv, VAR_DECLARE_GLOBAL | VAR_EXPORTED);
+	}
+	else if (aAllowFunc && (func = GetBuiltInFunc(aVarName)))
+	{
+		var = new Var(const_cast<LPTSTR>(func->mName), VAR_DECLARE_GLOBAL | VAR_EXPORTED);
+	}
+	else
+		return nullptr;
+
+	if (!var || !mBuiltinModule.mVars.Insert(var, insert_pos))
+	{
+		if (func)
+			func->Release();
+		if (aDisplayError)
+			*aDisplayError = MemoryError();
 		return nullptr;
 	}
-	return the_new_var;
+	if (func)
+	{
+		var->AssignSkipAddRef(func);
+		var->MakeReadOnly();
+	}
+	return var;
 }
 
 

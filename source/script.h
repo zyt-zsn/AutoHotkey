@@ -2139,9 +2139,8 @@ private:
 	FuncList mFuncs;
 
 	ScriptModuleList mModules;
-	ScriptModule mBuiltinModule { _T("AHK"), nullptr };
-	ScriptImport mDefaultImport { &mBuiltinModule };
-	ScriptModule mDefaultModule { _T("__Main"), &mDefaultImport };
+	ScriptModule mBuiltinModule { _T("AHK") };
+	ScriptModule mDefaultModule { _T("__Main") };
 	ScriptModule *mCurrentModule = &mBuiltinModule;
 	ScriptModule *mLastModule = nullptr;
 	
@@ -2332,8 +2331,8 @@ public:
 	LPTSTR FindLibraryFile(LPTSTR aName, size_t aNameLength, bool aIsModule = false);
 #endif
 	Func *FindGlobalFunc(LPCTSTR aFuncName, size_t aFuncNameLength = 0);
-	static Func *GetBuiltInFunc(LPTSTR aFuncName);
-	static Func *GetBuiltInMdFunc(LPTSTR aFuncName);
+	static Func *GetBuiltInFunc(LPCTSTR aFuncName);
+	static Func *GetBuiltInMdFunc(LPCTSTR aFuncName);
 	UserFunc *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, FuncDefType aIsInExpression = FuncDefNormal, Object *aClassObject = nullptr);
 	Var *AddFuncVar(UserFunc *aFunc);
 	UserFunc *AddFuncToList(UserFunc *aFunc);
@@ -2362,7 +2361,7 @@ public:
 		, VarList **apList = nullptr, int *apInsertPos = nullptr, ResultType *aDisplayError = nullptr);
 	Var *FindUpVar(LPCTSTR aVarName, size_t aVarNameLength, UserFunc &aInner, ResultType *aDisplayError);
 	Var *AddVar(LPCTSTR aVarName, size_t aVarNameLength, VarList *aList, int aInsertPos, int aScope);
-	Var *FindOrAddBuiltInVar(LPCTSTR aVarName, VarEntry *aVarEntry);
+	Var *FindOrAddBuiltInVar(LPCTSTR aVarName, bool aAllowFunc, ResultType *aDisplayError);
 	static VarEntry *GetBuiltInVar(LPCTSTR aVarName);
 
 	// Alias to improve clarity and reduce code size (if compiler chooses not to inline; due to how parameter defaults work):
