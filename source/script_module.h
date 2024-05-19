@@ -41,6 +41,8 @@ public:
 	bool HasFileIndex(FileIndexType aFile);
 	ResultType AddFileIndex(FileIndexType aFile);
 
+	IObject *FindGlobalObject(LPCTSTR aName);
+
 	ScriptModule() {}
 	ScriptModule(LPCTSTR aName) : mName(aName) {}
 

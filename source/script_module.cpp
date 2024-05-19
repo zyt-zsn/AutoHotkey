@@ -268,3 +268,14 @@ ResultType ScriptModule::AddFileIndex(FileIndexType aFile)
 	mFiles[mFilesCount++] = aFile;
 	return OK;
 }
+
+
+IObject *ScriptModule::FindGlobalObject(LPCTSTR aName)
+{
+	if (auto var = mVars.Find(aName))
+	{
+		ASSERT(!var->IsVirtual());
+		return var->ToObject();
+	}
+	return nullptr;
+}

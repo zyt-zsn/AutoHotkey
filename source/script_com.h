@@ -12,6 +12,7 @@ class ComEvent : public ObjectBase
 	ITypeInfo *mTypeInfo = nullptr;
 	IID mIID;
 	IObject *mAhkObject = nullptr;
+	ScriptModule *mModule = nullptr;
 	TCHAR mPrefix[64];
 
 public:

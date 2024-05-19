@@ -1093,8 +1093,8 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 		// Copy method name into our buffer, applying prefix and converting if necessary.
 		TCHAR funcName[256];
 		sntprintf(funcName, _countof(funcName), _T("%s%ws"), mPrefix, memberName);
-		// Find the script function:
-		func = g_script.FindGlobalFunc(funcName);
+		// Find the script function (or any callable object in a global var):
+		func = mModule->FindGlobalObject(funcName);
 		dispid = DISPID_VALUE;
 		hr = func ? S_OK : DISP_E_MEMBERNOTFOUND;
 	}
@@ -1149,7 +1149,10 @@ void ComEvent::SetPrefixOrSink(LPCTSTR pfx, IObject *ahkObject)
 		mAhkObject = ahkObject;
 	}
 	if (pfx)
+	{
+		mModule = g_script.CurrentModule();
 		tcslcpy(mPrefix, pfx, _countof(mPrefix));
+	}
 }
 
 ResultType ComObject::Invoke(IObject_Invoke_PARAMS_DECL)
