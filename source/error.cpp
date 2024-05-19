@@ -723,7 +723,7 @@ ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo)
 	if (g_script.mErrorStdOut && !g_script.mIsReadyToExecute) // i.e. runtime errors are always displayed via dialog.
 	{
 		// See LineError() for details.
-		PrintErrorStdOut(aErrorText, aExtraInfo, mCurrFileIndex, mCombinedLineNumber);
+		PrintErrorStdOut(aErrorText, aExtraInfo, mCurrLine ? mCurrLine->mFileIndex : mCurrFileIndex, CurrentLine());
 	}
 	else
 	{
