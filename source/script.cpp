@@ -7356,7 +7356,7 @@ Var *Script::AddVar(LPCTSTR aVarName, size_t aVarNameLength, VarList *aList, int
 
 
 
-Var *Script::FindOrAddBuiltInVar(LPCTSTR aVarName, bool aAllowFunc, ResultType *aDisplayError)
+Var *Script::FindOrAddBuiltInVar(LPCTSTR aVarName, bool aAllowNonVirtual, ResultType *aDisplayError)
 {
 	// mBuiltinModule currently isn't handled via mCurrentModule->mImports because we would
 	// still need to call Find() to get insert_pos if a BIV must be added, and then there's
@@ -7365,7 +7365,7 @@ Var *Script::FindOrAddBuiltInVar(LPCTSTR aVarName, bool aAllowFunc, ResultType *
 	int insert_pos;
 	Var *var = mBuiltinModule.mVars.Find(aVarName, &insert_pos);
 	if (var)
-		return var;
+		return (aAllowNonVirtual || var->Type() == VAR_VIRTUAL) ? var : nullptr;
 
 	Func *func = nullptr;
 	if (auto biv = GetBuiltInVar(aVarName))
@@ -7373,7 +7373,7 @@ Var *Script::FindOrAddBuiltInVar(LPCTSTR aVarName, bool aAllowFunc, ResultType *
 		if (auto name = SimpleHeap::Malloc(aVarName))
 			var = new Var(name, biv, VAR_DECLARE_GLOBAL | VAR_EXPORTED);
 	}
-	else if (aAllowFunc && (func = GetBuiltInFunc(aVarName)))
+	else if (aAllowNonVirtual && (func = GetBuiltInFunc(aVarName)))
 	{
 		var = new Var(const_cast<LPTSTR>(func->mName), VAR_DECLARE_GLOBAL | VAR_EXPORTED);
 	}

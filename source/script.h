@@ -2362,7 +2362,7 @@ public:
 		, VarList **apList = nullptr, int *apInsertPos = nullptr, ResultType *aDisplayError = nullptr);
 	Var *FindUpVar(LPCTSTR aVarName, size_t aVarNameLength, UserFunc &aInner, ResultType *aDisplayError);
 	Var *AddVar(LPCTSTR aVarName, size_t aVarNameLength, VarList *aList, int aInsertPos, int aScope);
-	Var *FindOrAddBuiltInVar(LPCTSTR aVarName, bool aAllowFunc, ResultType *aDisplayError);
+	Var *FindOrAddBuiltInVar(LPCTSTR aVarName, bool aAllowNonVirtual, ResultType *aDisplayError);
 	static VarEntry *GetBuiltInVar(LPCTSTR aVarName);
 
 	// Alias to improve clarity and reduce code size (if compiler chooses not to inline; due to how parameter defaults work):
