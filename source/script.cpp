@@ -312,7 +312,7 @@ Script::Script()
 	, mFirstTimer(NULL), mLastTimer(NULL), mTimerEnabledCount(0), mTimerCount(0)
 	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0)
 	, mNextLineIsFunctionBody(false)
-	, mClassObjectCount(0), mUnresolvedClasses(NULL), mClassProperty(NULL), mClassPropertyDef(NULL)
+	, mClassObjectCount(0), mClassProperty(NULL), mClassPropertyDef(NULL)
 	, mCurrFileIndex(0), mCombinedLineNumber(0)
 	, mFileSpec(_T("")), mFileDir(_T("")), mFileName(_T("")), mOurEXE(_T("")), mOurEXEDir(_T("")), mMainWindowTitle(_T(""))
 	, mScriptName(NULL)
@@ -1416,15 +1416,6 @@ UINT Script::LoadFromFile(LPCTSTR aFileSpec)
 	// This must be done after PreparseExpressions() has resolved all variable references.
 	if (!PreprocessLocalVars(mFuncs))
 		return LOADING_FAILED;
-
-	// Resolve any unresolved base classes.
-	if (mUnresolvedClasses)
-	{
-		if (!ResolveClasses())
-			return LOADING_FAILED;
-		mUnresolvedClasses->Release();
-		mUnresolvedClasses = NULL;
-	}
 
 	// Set the working directory to the script's directory.  This must be done after the above
 	// since the working dir may have been changed by the script's use of "#Include C:\Scripts".
@@ -6067,35 +6058,13 @@ ResultType Script::DefineClass(LPTSTR aBuf, TCHAR aExport)
 		if (!*base_class_name)
 			return ScriptError(_T("Missing class name."), cp);
 		base_class = FindClass(base_class_name);
-		if (!base_class)
-		{
-			// This class hasn't been defined yet, but it might be.  Automatically create the
-			// class, but store it in the "unresolved" list.  When its definition is encountered,
-			// it will be removed from the list.  If any classes remain in the list when the end
-			// of the script is reached, an error will be thrown.
-			if (mUnresolvedClasses)
-				base_class = (Object *)mUnresolvedClasses->GetOwnPropObj(base_class_name);
-			else
-				mUnresolvedClasses = Object::Create();
-			if (!base_class)
-			{
-				if (   !(base_prototype = Object::CreatePrototype(base_class_name))
-					|| !(base_class = Object::CreateClass(base_prototype))
-					// This property will be removed when the class definition is encountered:
-					|| !base_class->SetOwnProp(_T("Line"), ((__int64)mCurrFileIndex << 32) | mCombinedLineNumber)
-					|| !mUnresolvedClasses->SetOwnProp(base_class_name, base_class)  )
-					return ScriptError(ERR_OUTOFMEM);
-			}
-		}
-		base_prototype = (Object *)base_class->GetOwnPropObj(_T("Prototype"));
+		base_prototype = base_class ? (Object *)base_class->GetOwnPropObj(_T("Prototype")) : nullptr;
 	}
 
 	// Validate the name even if this is a nested definition, for consistency.
 	if (!Var::ValidateName(class_name, DISPLAY_CLASS_ERROR))
 		return FAIL;
 
-	Object *&class_object = mClassObject[mClassObjectCount]; // For convenience.
-	class_object = nullptr;
 	bool conflict_found = false;
 	
 	if (mClassObjectCount) // Nested class definition.
@@ -6144,32 +6113,23 @@ ResultType Script::DefineClass(LPTSTR aBuf, TCHAR aExport)
 	if (conflict_found)
 		return ScriptError(ERR_DUPLICATE_DECLARATION, aBuf);
 
-	if (mUnresolvedClasses)
-	{
-		token.SetValue(mClassName, length);
-		ExprTokenType *param = &token;
-		ResultToken result_token;
-		result_token.symbol = SYM_STRING; // Init for detecting SYM_OBJECT below.
-		// Search for class and simultaneously remove it from the unresolved list:
-		mUnresolvedClasses->DeleteProp(result_token, 0, IT_CALL, &param, 1); // result_token := mUnresolvedClasses.Delete(token)
-		// If a field was found/removed, it can only be SYM_OBJECT.
-		if (result_token.symbol == SYM_OBJECT)
-		{
-			// Use this object as the class.  At least one other object already refers to it as mBase.
-			class_object = (Object *)result_token.object;
-			class_object->DeleteOwnProp(_T("Line")); // Remove the error reporting info.
-		}
-	}
+	Object *prototype = Object::CreatePrototype(mClassName, base_prototype);
+	Object *class_object = Object::CreateClass(prototype, base_class);
 
-	Object *prototype;
-	if (class_object)
+	if (!base_class)
 	{
-		prototype = (Object *)class_object->GetOwnPropObj(_T("Prototype"));
-		class_object->SetBase(base_class);
-		prototype->SetBase(base_prototype);
+		// None of this module's class declarations up to this point match base_class_name,
+		// but it could be a class defined below this point, or a class defined in a module
+		// which hasn't been imported yet or has been imported but hasn't been resolved.
+		auto urc = new UnresolvedBaseClass;
+		urc->subclass = class_object;
+		urc->subclass_proto = prototype;
+		urc->name = _tcsdup(base_class_name);
+		urc->file_index = mCurrFileIndex;
+		urc->line_number = mCombinedLineNumber;
+		urc->next = mCurrentModule->mUnresolvedBaseClass;
+		mCurrentModule->mUnresolvedBaseClass = urc;
 	}
-	else
-		class_object = Object::CreateClass(prototype = Object::CreatePrototype(mClassName, base_prototype), base_class);
 
 	if (mClassObjectCount)
 	{
@@ -6185,7 +6145,7 @@ ResultType Script::DefineClass(LPTSTR aBuf, TCHAR aExport)
 
 	if (mClassObjectCount ? !DefineClassVarInit(mClassName, true, outer_class, ACT_EXPRESSION) : !ParseAndAddLine(mClassName, ACT_EXPRESSION))
 		return FAIL;
-	++mClassObjectCount;
+	mClassObject[mClassObjectCount++] = class_object;
 	// Define __Init unconditionally so that classes without static vars do not inherit __Init.
 	if (!DefineClassInit(true))
 		return FAIL;
@@ -6570,15 +6530,28 @@ Object *Script::FindClass(LPCTSTR aClassName, size_t aClassNameLength)
 	// to the current scope (which is always global for class..extends, but often local for Catch).
 	// This also avoids confusion due to inconsistency between `catch x` and other references to x.
 	Var *base_var = FindVar(class_name, cp - class_name);
-	if (!base_var)
-		return NULL;
+	for (;;)
+	{
+		if (!base_var || !base_var->HasObject()) // Has vs. Is to handle import aliases.
+			return nullptr;
+	
+		IObject *obj = base_var->Object();
+		if (obj->IsOfType(Object::sClassPrototype))
+		{
+			base_object = (Object*)obj;
+			break;
+		}
+		if (obj->Base() != ScriptModule::sPrototype)
+			return nullptr; // Maybe something like "Class nonsense extends MsgBox".
 
-	// Although at load time only the "Object" type can exist, dynamic_cast is used in case we're called at run-time:
-	if (  !(base_var->IsObject() && (base_object = dynamic_cast<Object *>(base_var->Object()))
-		&& base_object->IsDerivedFrom(Object::sClassPrototype))  ) // Rule out something silly like "class x extends MsgBox".
-		return NULL;
+		auto mod = (ScriptModule*)obj;
+		key = cp + 1; cp = _tcschr(key, '.');
+		*cp = '\0';
+		base_var = mod->mVars.Find(key);
+		if (!base_var || !base_var->IsExported())
+			return nullptr;
+	}
 
-	// Even if the loop below has no iterations, it initializes 'key' to the appropriate value:
 	for (key = cp + 1; cp = _tcschr(key, '.'); key = cp + 1) // For each key in something like TypeVar.Key1.Key2.
 	{
 		if (cp == key)
@@ -6595,35 +6568,6 @@ Object *Script::FindClass(LPCTSTR aClassName, size_t aClassNameLength)
 
 	return base_object;
 }
-
-
-Object *Object::GetUnresolvedClass(LPTSTR &aName)
-// This method is only valid for mUnresolvedClass.
-{
-	if (!mFields.Length())
-		return NULL;
-	aName = mFields[0].name;
-	return (Object *)mFields[0].object;
-}
-
-ResultType Script::ResolveClasses()
-{
-	LPTSTR name;
-	Object *base = mUnresolvedClasses->GetUnresolvedClass(name);
-	if (!base)
-		return OK;
-	// There is at least one unresolved class.
-	if (__int64 line = base->GetOwnPropInt64(_T("Line")))
-	{
-		// In this case (an object in the mUnresolvedClasses list), it is always an integer
-		// containing the file index and line number:
-		mCurrFileIndex = int(line >> 32);
-		mCombinedLineNumber = LineNumberType(line);
-	}
-	mCurrLine = NULL;
-	return ScriptError(_T("Unknown class."), name);
-}
-
 
 
 
@@ -12407,8 +12351,27 @@ ResultType Script::PreprocessLocalVars(UserFunc &aFunc)
 ResultType Script::PreparseVarRefs()
 {
 	for (mCurrentModule = mLastModule; mCurrentModule; mCurrentModule = mCurrentModule->mPrev)
+	{
 		if (!PreparseVarRefs(mCurrentModule->mFirstLine))
 			return FAIL;
+
+		while (auto *unc = mCurrentModule->mUnresolvedBaseClass)
+		{
+			Object *proto, *cls = FindClass(unc->name);
+			if (!cls || !(proto = (Object*)cls->GetOwnPropObj(_T("Prototype"))))
+			{
+				mCurrLine = NULL;
+				mCurrFileIndex = unc->file_index;
+				mCombinedLineNumber = unc->line_number;
+				return ScriptError(_T("Unknown class."), unc->name);
+			}
+			unc->subclass->SetBase(cls);
+			unc->subclass_proto->SetBase(proto);
+			mCurrentModule->mUnresolvedBaseClass = unc->next;
+			free(unc->name);
+			delete unc;
+		}
+	}
 	return OK;
 }
 

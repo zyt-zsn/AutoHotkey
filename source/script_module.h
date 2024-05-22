@@ -29,6 +29,7 @@ public:
 	ScriptModule *mPrev = nullptr;
 	VarList mVars;
 	Var *mSelf = nullptr;
+	UnresolvedBaseClass *mUnresolvedBaseClass = nullptr;
 	FileIndexType *mFiles = nullptr, mFilesCount = 0, mFilesCountMax = 0;
 	bool mExecuted = false;
 	bool mIsBuiltinModule = false;
