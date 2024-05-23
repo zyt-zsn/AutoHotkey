@@ -174,6 +174,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_EXP_ILLEGAL_CHAR _T("Illegal character in expression.")
 #define ERR_DUPLICATE_DECLARATION _T("Duplicate declaration.")
 #define ERR_UNEXPECTED_DECL _T("Unexpected declaration.")
+#define ERR_UNEXPECTED_DIRECTIVE _T("Unexpected directive.")
 #define ERR_INVALID_VARDECL _T("Invalid variable declaration.")
 #define ERR_INVALID_FUNCDECL _T("Invalid function declaration.")
 #define ERR_INVALID_CLASS_VAR _T("Invalid class variable declaration.")

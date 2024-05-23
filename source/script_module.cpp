@@ -28,8 +28,6 @@ ResultType ScriptModule::Invoke(IObject_Invoke_PARAMS_DECL)
 
 ResultType Script::ParseModuleDirective(LPCTSTR aName)
 {
-	if (g->CurrentFunc || mClassObjectCount)
-		return CONDITION_FALSE;
 	int at;
 	if (mModules.Find(aName, &at))
 		return ScriptError(ERR_DUPLICATE_DECLARATION, aName);

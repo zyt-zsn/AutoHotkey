@@ -2371,7 +2371,7 @@ process_completed_line:
 				return FAIL;
 			goto continue_main_loop;
 		}
-		else if (!g->CurrentFunc && !_tcsnicmp(buf, _T("Import"), 6) && IS_SPACE_OR_TAB(buf[6]))
+		else if (!mLineParent && !_tcsnicmp(buf, _T("Import"), 6) && IS_SPACE_OR_TAB(buf[6]))
 		{
 			if (!ParseImportStatement(buf + 7))
 				return FAIL;
@@ -3909,6 +3909,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 
 	if (IS_DIRECTIVE_MATCH(_T("#Module")))
 	{
+		if (mLineParent || mClassObjectCount)
+			return ScriptError(ERR_UNEXPECTED_DIRECTIVE, aBuf);
 		if (!parameter)
 			return ScriptError(ERR_PARAM1_REQUIRED);
 		return ParseModuleDirective(parameter);
