@@ -1181,7 +1181,10 @@ ResultType Script::ExitApp(ExitReasons aExitReason)
 // for times when it would be unsafe to call MsgBox() due to the possibility that it would
 // make the situation even worse).
 {
-	int aExitCode = mPendingExitCode; // It's done this way so Exit() can pass an exit code indirectly.
+	// If we're called before the script has loaded, it is almost certainly by the ExitApp
+	// button on an error/warning dialog.  Treat it as a load-time error either way since
+	// that's probably what the user wants.
+	int aExitCode = mIsReadyToExecute ? mPendingExitCode : CRITICAL_ERROR;
 
 	// Note that currently, mOnExit.Count() can only be non-zero if the script is in a runnable
 	// state (since registering an OnExit function requires that the script calls OnExit()).
