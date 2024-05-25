@@ -2361,7 +2361,7 @@ public:
 	static bool EndsWithOperator(LPTSTR aBuf, LPTSTR aBuf_marker);
 
 	#define FINDVAR_DEFAULT			(VAR_LOCAL | VAR_GLOBAL)
-	#define FINDVAR_GLOBAL			VAR_GLOBAL
+	#define FINDVAR_GLOBAL			(VAR_GLOBAL | FINDVAR_GLOBAL_FALLBACK)
 	#define FINDVAR_LOCAL			VAR_LOCAL
 	#define FINDVAR_GLOBAL_FALLBACK	0x100
 	#define ADDVAR_NO_VALIDATE		0x400
@@ -2376,7 +2376,7 @@ public:
 	static VarEntry *GetBuiltInVar(LPCTSTR aVarName);
 
 	// Alias to improve clarity and reduce code size (if compiler chooses not to inline; due to how parameter defaults work):
-	Var *FindGlobalVar(LPCTSTR aVarName, size_t aVarNameLength = 0) { return FindVar(aVarName, aVarNameLength, FINDVAR_GLOBAL | FINDVAR_GLOBAL_FALLBACK); }
+	Var *FindGlobalVar(LPCTSTR aVarName, size_t aVarNameLength = 0) { return FindVar(aVarName, aVarNameLength, FINDVAR_GLOBAL); }
 
 	VarList *GlobalVars() { return &CurrentModule()->mVars; }
 	
