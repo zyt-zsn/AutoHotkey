@@ -36,8 +36,8 @@ public:
 
 	// #Warn settings
 	WarnMode Warn_LocalSameAsGlobal = WARNMODE_OFF;
-	WarnMode Warn_Unreachable = WARNMODE_MSGBOX;
-	WarnMode Warn_VarUnset = WARNMODE_MSGBOX;
+	WarnMode Warn_Unreachable = WARNMODE_ON;
+	WarnMode Warn_VarUnset = WARNMODE_ON;
 
 	bool HasFileIndex(FileIndexType aFile);
 	ResultType AddFileIndex(FileIndexType aFile);

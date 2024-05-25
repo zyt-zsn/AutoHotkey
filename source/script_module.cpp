@@ -34,6 +34,10 @@ ResultType Script::ParseModuleDirective(LPCTSTR aName)
 	// TODO: Validate module names.
 	aName = SimpleHeap::Alloc(aName);
 	auto mod = new ScriptModule(aName);
+	// Let any previous #Warn settings carry over from the previous module, by default.
+	mod->Warn_LocalSameAsGlobal = mCurrentModule->Warn_LocalSameAsGlobal;
+	mod->Warn_Unreachable = mCurrentModule->Warn_Unreachable;
+	mod->Warn_VarUnset = mCurrentModule->Warn_VarUnset;
 	if (!mModules.Insert(mod, at))
 		return FAIL;
 	CloseCurrentModule();

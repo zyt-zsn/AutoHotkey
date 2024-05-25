@@ -1312,6 +1312,8 @@ void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExt
 		return;
 #endif
 	
+	if (warnMode == WARNMODE_ON)
+		warnMode = g_WarnMode;
 	if (warnMode == WARNMODE_OFF)
 		return;
 

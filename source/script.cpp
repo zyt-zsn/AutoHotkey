@@ -3810,21 +3810,28 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		int i;
 
 		static const LPCTSTR sWarnTypes[] = { WARN_TYPE_STRINGS };
-		WarnType warnType = WARN_ALL; // Set default.
+		WarnType warnType = INVALID_WARN_TYPE; // Set default.
 		if (*parameter)
 		{
-			for (i = 0; ; ++i)
+			for (i = 0;; ++i)
 			{
 				if (i == _countof(sWarnTypes))
-					return ScriptError(ERR_PARAM1_INVALID, aBuf);
-				if (!_tcsicmp(parameter, sWarnTypes[i]))
+				{
+					if (*param2)
+						return ScriptError(ERR_PARAM_INVALID, aBuf);
+					param2 = parameter;
 					break;
+				}
+				if (!_tcsicmp(parameter, sWarnTypes[i]))
+				{
+					warnType = (WarnType)i;
+					break;
+				}
 			}
-			warnType = (WarnType)i;
 		}
 
 		static const LPCTSTR sWarnModes[] = { WARN_MODE_STRINGS };
-		WarnMode warnMode = WARNMODE_MSGBOX; // Set default.
+		WarnMode warnMode = WARNMODE_ON; // Set default.
 		if (*param2)
 		{
 			for (i = 0; ; ++i)
@@ -3842,6 +3849,16 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 
 		if (warnType == WARN_LOCAL_SAME_AS_GLOBAL || warnType == WARN_ALL)
 			mCurrentModule->Warn_LocalSameAsGlobal = warnMode;
+		
+		if (warnType == INVALID_WARN_TYPE) // Type not specified.
+			if (warnMode == WARNMODE_ON) // Mode "On" or not specified.
+			{
+				if (!*param2)
+					mCurrentModule->Warn_LocalSameAsGlobal = WARNMODE_OFF; // Reset to universal default.
+				warnType = WARN_ALL; // Reset the rest to ON.
+			}
+			else
+				g_WarnMode = warnMode;
 
 		if (warnType == WARN_UNREACHABLE || warnType == WARN_ALL)
 			mCurrentModule->Warn_Unreachable = warnMode;
