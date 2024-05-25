@@ -44,7 +44,6 @@ bool TextStream::Open(LPCTSTR aFileSpec, DWORD aFlags, UINT aCodePage)
 
 	SetCodePage(aCodePage);
 	mFlags = aFlags;
-	mLastWriteChar = 0;
 
 	int mode = aFlags & ACCESS_MODE_MASK;
 	if (mode == USEHANDLE)
