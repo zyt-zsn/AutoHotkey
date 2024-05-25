@@ -58,7 +58,7 @@ ResultType Script::ParseImportStatement(LPTSTR aBuf)
 
 Var *Script::FindImportedVar(LPCTSTR aVarName)
 {
-	for (auto imp = mCurrentModule->mImports; imp; imp = imp->next)
+	for (auto imp = CurrentModule()->mImports; imp; imp = imp->next)
 	{
 		if (*imp->names == '*')
 		{
