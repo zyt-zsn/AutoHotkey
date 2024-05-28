@@ -1226,7 +1226,7 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 			else --page_start;
 			--page_end;
 		}
-		int i = page_start;
+		int i = min(page_start, (int)mFields.Length());
 		// For each field in the requested page...
 		for ( ; i < page_end && (index_t)i < mFields.Length(); ++i)
 		{
@@ -1249,7 +1249,7 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 			if (dynamic_cast<NativeFunc *>(enum_method))
 			{
 				// Built-in enumerators are always safe to call automatically.
-				aDebugger->WriteEnumItems(this, i - mFields.Length(), page_end - i);
+				aDebugger->WriteEnumItems(this, page_start - i, page_end - i);
 			}
 			else
 			{
