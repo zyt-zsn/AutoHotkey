@@ -6133,7 +6133,7 @@ ResultType Script::DefineClass(LPTSTR aBuf, TCHAR aExport)
 		return ScriptError(ERR_DUPLICATE_DECLARATION, aBuf);
 
 	Object *prototype = Object::CreatePrototype(mClassName, base_prototype);
-	Object *class_object = Object::CreateClass(prototype, base_class);
+	Object *class_object = Object::CreateClass(prototype, base_class ? base_class : Object::sClassPrototype);
 
 	if (!base_class)
 	{
