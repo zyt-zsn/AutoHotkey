@@ -1225,8 +1225,9 @@ ResultType Script::ShowError(Line* aLine, ResultType aErrorType, ExprTokenType *
 					break;
 			if (!aLine || aLine->mFileIndex != file_index || aLine->mLineNumber != line_no) // Keep aLine if it matches, in case of multiple Lines with the same number.
 			{
-				Line *line;
-				for (line = mFirstLine;
+				Line *line = nullptr;
+				for (auto mod = mLastModule; mod; mod = mod->mPrev)
+				for (line = mod->mFirstLine;
 					line && (line->mLineNumber != line_no || line->mFileIndex != file_index
 						|| !line->mArgc && line->mNextLine && line->mNextLine->mLineNumber == line_no); // Skip any same-line block-begin/end, try, else or finally.
 					line = line->mNextLine);
