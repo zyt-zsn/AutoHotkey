@@ -2774,7 +2774,13 @@ ResultType Object::PropEnum::Next(Var *aName, Var *aVal)
 {
 	int nextidx, testidx = 0;
 	Object *nextobj = nullptr;
-	bool is_proto = mObject->IsClassPrototype() && !mDebuggerMode;
+
+	// Property getters should not be called for Prototype objects, since they are not instances.
+	// Checking via mThisToken rather than mObject supports the substitution performed by the debugger.
+	bool is_proto = mThisToken.symbol == SYM_OBJECT
+		&& mThisToken.object->IsOfType(Object::sPrototype)
+		&& static_cast<Object*>(mThisToken.object)->IsClassPrototype();
+
 	for (Object *testobj = mObject;; )
 	{
 		if (mIndex[testidx] < testobj->mFields.Length())
