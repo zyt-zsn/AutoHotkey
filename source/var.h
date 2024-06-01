@@ -910,7 +910,7 @@ public:
 		var.mAttrib |= VAR_ATTRIB_UNINITIALIZED;
 	}
 
-	ResultType Uninitialize(int aWhenToFree = VAR_FREE_IF_LARGE) 
+	ResultType AssignUnset(int aWhenToFree = VAR_FREE_IF_LARGE) 
 	{
 		if (IsVirtual())
 		{
@@ -918,8 +918,16 @@ public:
 			unset.symbol = SYM_MISSING;
 			return AssignVirtual(unset);
 		}
-		Free(aWhenToFree | VAR_REQUIRE_INIT);
+		UninitializeNonVirtual(aWhenToFree);
 		return OK;
+	}
+
+	// Make var unset; IsVirtual() must be false.  Calling this rather than AssignUnset()
+	// in cases where IsVirtual() can't be true reduces code size due to inlining.
+	void UninitializeNonVirtual(int aWhenToFree = VAR_FREE_IF_LARGE) 
+	{
+		ASSERT(!IsVirtual());
+		Free(aWhenToFree | VAR_REQUIRE_INIT);
 	}
 
 }; // class Var

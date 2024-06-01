@@ -359,7 +359,7 @@ ResultType CallEnumerator(IObject *aEnumerator, ExprTokenType *aParam[], int aPa
 		if (aParam[i]->symbol == SYM_OBJECT)
 		{
 			ASSERT(dynamic_cast<VarRef *>(aParam[i]->object));
-			((VarRef *)aParam[i]->object)->Uninitialize(VAR_NEVER_FREE);
+			((VarRef *)aParam[i]->object)->UninitializeNonVirtual(VAR_NEVER_FREE);
 		}
 	auto result = aEnumerator->Invoke(result_token, IT_CALL, nullptr, t_this, aParam, aParamCount);
 	if (result == FAIL || result == EARLY_EXIT || result == INVOKE_NOT_HANDLED)
@@ -2631,10 +2631,9 @@ ResultType Array::GetEnumItem(UINT &aIndex, Var *aVal, Var *aReserved, int aVarC
 			{
 			default:
 				if (item.symbol == SYM_MISSING)
-					aVal->Uninitialize();
+					aVal->AssignUnset();
 				else
 					aVal->AssignString(item.string, item.string.Length());
-				
 				break;
 			case SYM_INTEGER:	aVal->Assign(item.n_int64);			break;
 			case SYM_FLOAT:		aVal->Assign(item.n_double);		break;

@@ -35,15 +35,18 @@ ResultType Var::AssignHWND(HWND aWnd)
 
 ResultType Var::Assign(Var &aVar)
 // Assign some other variable to the "this" variable.
-// source_var->Type() must be VAR_NORMAL, but this->Type() can be VAR_VIRTUAL.
+// aVar.Type() and this->Type() must be VAR_NORMAL.
 // Returns OK or FAIL.
 {
 	Var &target_var = *ResolveAlias();
 	Var &source_var = *aVar.ResolveAlias();
 
+	// Caller already handled virtual target_var.
+	ASSERT(!target_var.IsVirtual());
+
 	if (source_var.mAttrib & VAR_ATTRIB_UNINITIALIZED)
 	{
-		target_var.Uninitialize();
+		target_var.UninitializeNonVirtual();
 		return OK;
 	}
 
@@ -83,7 +86,7 @@ ResultType Var::Assign(ExprTokenType &aToken)
 	default:
 		ASSERT(!"Unhandled symbol");
 	case SYM_MISSING:
-		Uninitialize();
+		UninitializeNonVirtual();
 		return OK;
 	}
 	// Since above didn't return, it can only be SYM_STRING.
@@ -1434,7 +1437,7 @@ void VarRef::__Value(ResultToken &aResultToken, int aID, int aFlags, ExprTokenTy
 		if (aParamCount)
 			Assign(*aParam[0]) || aResultToken.SetExitResult(FAIL);
 		else
-			Uninitialize();
+			UninitializeNonVirtual();
 	}
 	else
 		ToToken(aResultToken);
