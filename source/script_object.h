@@ -616,8 +616,8 @@ public:
 
 	static LPTSTR sMetaFuncName[];
 
-	IObject_DebugWriteProperty_Def;
 #ifdef CONFIG_DEBUGGER
+	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aMaxDepth);
 	friend class Debugger;
 #endif
 };

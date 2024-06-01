@@ -1169,8 +1169,13 @@ int Debugger::WritePropertyObjectXml(PropertyInfo &aProp)
 	if (!aProp.invokee)
 		aProp.invokee = aProp.value.object;
 	PropertyWriter pw(*this, aProp);
-	// Ask the object to write out its properties:
-	aProp.invokee->DebugWriteProperty(&pw, aProp.page, aProp.pagesize, aProp.max_depth);
+	// Write out the object's properties.
+	Object *defs;
+	if (aProp.invokee->IsOfType(Object::sPrototype))
+		defs = static_cast<Object*>(aProp.invokee);
+	else
+		defs = aProp.invokee->Base();
+	defs->DebugWriteProperty(&pw, aProp.page, aProp.pagesize, aProp.max_depth);
 	aProp.fullname.Truncate(pw.mNameLength);
 	// For simplicity/code size, instead of requiring error handling in aObject,
 	// any failure during the above sets pw.mError, which causes it to ignore
@@ -1244,14 +1249,6 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 	}
 
 	aDebugger->EndProperty(cookie);
-}
-
-
-void IObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth)
-{
-	// Base() should return non-null for all classes which don't override DebugWriteProperty.
-	if (auto base = Base())
-		base->DebugWriteProperty(aDebugger, aPage, aPageSize, aMaxDepth);
 }
 
 
