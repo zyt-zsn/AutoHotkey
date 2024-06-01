@@ -2419,6 +2419,17 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 	if (mPendingHotkey)
 		return ScriptError(ERR_HOTKEY_MISSING_BRACE, mPendingHotkey);
 
+	// Detect a common cause of issues with non-ASCII characters: file saved as ANSI but read as UTF-8.
+	// As UTF-8 is recommended and is nearly always the default, it is referenced directly in the message.
+	// For code size and due to rarity, setting a different default with /CP disables the warning rather
+	// than changing the message to be accurate or implying that a BOM is required (it normally isn't).
+	if (fp->DecodingErrors() && fp->GetCodePage() == CP_UTF8)
+	{
+		mCurrLine = nullptr;
+		mCombinedLineNumber = 0;
+		ScriptWarning(g_WarnMode, _T("Some non-ASCII characters could not be decoded.\n\nEnsure that the file is saved as UTF-8."));
+	}
+
 	++mCombinedLineNumber; // L40: Put the implicit ACT_EXIT on the line after the last physical line (for the debugger).
 	return OK;
 }

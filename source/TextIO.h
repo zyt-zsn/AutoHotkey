@@ -125,6 +125,7 @@ public:
 	}
 	UINT GetCodePage() { return mCodePage; }
 	DWORD GetFlags() { return mFlags; }
+	int DecodingErrors() { return mDecodingErrors; }
 
 protected:
 	// IO abstraction
@@ -222,6 +223,7 @@ protected:
 	DWORD mLastRead = 0;
 	UINT  mCodePage = -1;
 	CPINFO mCodePageInfo;
+	bool mDecodingErrors = 0;
 	
 	TCHAR mLastWriteChar = 0;
 
