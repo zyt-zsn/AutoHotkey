@@ -3138,9 +3138,15 @@ void Debugger::PropertyWriter::BeginProperty(LPCSTR aName, LPCSTR aType, int aNu
 
 	if (mDepth == 1) // Write <property> for the object itself.
 	{
-		LPTSTR classname = mProp.invokee->Type();
-		mError = mDbg.mResponseBuf.WriteF("<property name=\"%e\" fullname=\"%e\" type=\"%s\" facet=\"%s\" classname=\"%s\" address=\"%p\" size=\"0\" page=\"%i\" pagesize=\"%i\" children=\"%i\">"
-					, mProp.name, mProp.fullname.GetString(), aType, mProp.facet, U4T(classname), mProp.invokee, mProp.page, mProp.pagesize, aNumChildren > 0);
+		LPTSTR classname;
+		LPSTR class_suffix = "";
+		if (   mProp.invokee->IsOfType(Object::sPrototype)
+			&& (classname = static_cast<Object*>(mProp.invokee)->GetOwnPropString(_T("__Class")))   )
+			class_suffix = ".Prototype";
+		else
+			classname = mProp.invokee->Type();
+		mError = mDbg.mResponseBuf.WriteF("<property name=\"%e\" fullname=\"%e\" type=\"%s\" facet=\"%s\" classname=\"%s%s\" address=\"%p\" size=\"0\" page=\"%i\" pagesize=\"%i\" children=\"%i\">"
+					, mProp.name, mProp.fullname.GetString(), aType, mProp.facet, U4T(classname), class_suffix, mProp.invokee, mProp.page, mProp.pagesize, aNumChildren > 0);
 		return;
 	}
 
