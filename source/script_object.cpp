@@ -2617,30 +2617,31 @@ ResultType Array::GetEnumItem(UINT &aIndex, Var *aVal, Var *aReserved, int aVarC
 {
 	if (aIndex < mLength)
 	{
+		ResultType result = OK;
 		if (aVarCount > 1)
 		{
 			// Put the index first, only when there are two parameters.
 			if (aVal)
-				aVal->Assign((__int64)aIndex + 1);
+				result = aVal->Assign((__int64)aIndex + 1);
 			aVal = aReserved;
 		}
-		if (aVal)
+		if (aVal && result)
 		{
 			auto &item = mItem[aIndex];
 			switch (item.symbol)
 			{
 			default:
 				if (item.symbol == SYM_MISSING)
-					aVal->AssignUnset();
+					result = aVal->AssignUnset();
 				else
-					aVal->AssignString(item.string, item.string.Length());
+					result = aVal->AssignString(item.string, item.string.Length());
 				break;
-			case SYM_INTEGER:	aVal->Assign(item.n_int64);			break;
-			case SYM_FLOAT:		aVal->Assign(item.n_double);		break;
-			case SYM_OBJECT:	aVal->Assign(item.object);			break;
+			case SYM_INTEGER:	result = aVal->Assign(item.n_int64);	break;
+			case SYM_FLOAT:		result = aVal->Assign(item.n_double);	break;
+			case SYM_OBJECT:	result = aVal->Assign(item.object);		break;
 			}
 		}
-		return CONDITION_TRUE;
+		return result ? CONDITION_TRUE : FAIL;
 	}
 	return CONDITION_FALSE;
 }
@@ -2839,22 +2840,23 @@ ResultType Map::GetEnumItem(UINT &aIndex, Var *aKey, Var *aVal, int aVarCount)
 	if (aIndex < mCount)
 	{
 		auto &item = mItem[aIndex];
+		ResultType result = OK;
 		if (aKey)
 		{
 			if (aIndex < mKeyOffsetObject) // mKeyOffsetInt < mKeyOffsetObject
-				aKey->Assign(item.key.i);
+				result = aKey->Assign(item.key.i);
 			else if (aIndex < mKeyOffsetString) // mKeyOffsetObject < mKeyOffsetString
-				aKey->Assign(item.key.p);
+				result = aKey->Assign(item.key.p);
 			else // mKeyOffsetString < mCount
-				aKey->Assign(item.key.s);
+				result = aKey->Assign(item.key.s);
 		}
-		if (aVal)
+		if (aVal && result)
 		{
 			ExprTokenType value;
 			item.ToToken(value);
-			aVal->Assign(value);
+			result = aVal->Assign(value);
 		}
-		return CONDITION_TRUE;
+		return result ? CONDITION_TRUE : FAIL;
 	}
 	return CONDITION_FALSE;
 }
@@ -2871,18 +2873,19 @@ ResultType RegExMatchObject::GetEnumItem(UINT &aIndex, Var *aKey, Var *aVal, int
 		aVal = aKey;
 		aKey = nullptr;
 	}
+	ResultType result = OK;
 	if (aKey)
 	{
 		if (mPatternName && mPatternName[aIndex])
-			aKey->Assign(mPatternName[aIndex]);
+			result = aKey->Assign(mPatternName[aIndex]);
 		else
-			aKey->Assign((__int64)aIndex);
+			result = aKey->Assign((__int64)aIndex);
 	}
-	if (aVal)
+	if (aVal && result)
 	{
-		aVal->Assign(mHaystack - mHaystackStart + mOffset[aIndex*2], mOffset[aIndex*2+1]);
+		result = aVal->Assign(mHaystack - mHaystackStart + mOffset[aIndex*2], mOffset[aIndex*2+1]);
 	}
-	return CONDITION_TRUE;
+	return result ? CONDITION_TRUE : FAIL;
 }
 
 

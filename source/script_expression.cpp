@@ -842,12 +842,14 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			if (right_is_number == PURE_INTEGER)
 			{
 				this_token.value_int64 = TokenToInt64(right);
-				right.var->Assign(this_token.value_int64 + delta);
+				if (!right.var->Assign(this_token.value_int64 + delta))
+					goto abort;
 			}
 			else // right_is_number must be PURE_FLOAT because it's the only remaining alternative.
 			{
 				this_token.value_double = TokenToDouble(right, FALSE); // Pass FALSE for aCheckForHex since PURE_FLOAT is never hex.
-				right.var->Assign(this_token.value_double + delta);
+				if (!right.var->Assign(this_token.value_double + delta))
+					goto abort;
 			}
 			if (is_pre_op)
 			{

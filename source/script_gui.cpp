@@ -211,11 +211,12 @@ ResultType GuiType::GetEnumItem(UINT &aIndex, Var *aOutputVar1, Var *aOutputVar2
 		aOutputVar2 = aOutputVar1; // Return the more useful value in single-var mode: the control object.
 		aOutputVar1 = nullptr;
 	}
+	ResultType result = OK;
 	if (aOutputVar1)
-		aOutputVar1->AssignHWND(ctrl->hwnd);
-	if (aOutputVar2)
-		aOutputVar2->Assign(ctrl);
-	return CONDITION_TRUE;
+		result = aOutputVar1->AssignHWND(ctrl->hwnd);
+	if (aOutputVar2 && result)
+		result = aOutputVar2->Assign(ctrl);
+	return result ? CONDITION_TRUE : FAIL;
 }
 
 
