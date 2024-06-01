@@ -1823,7 +1823,6 @@ class Object::PropEnum : public EnumBase
 	Object *mObject;
 	index_t *mIndex;
 	int mIndexCount = 0;
-	bool mDebuggerMode = false;
 	ExprTokenType mThisToken;
 
 public:

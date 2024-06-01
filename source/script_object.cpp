@@ -2759,7 +2759,6 @@ Object::PropEnum::PropEnum(Object *aObject, ExprTokenType &aThisToken)
 	: PropEnum(aObject)
 {
 	mThisToken.CopyValueFrom(aThisToken);
-	mDebuggerMode = true;
 }
 
 
@@ -2786,7 +2785,7 @@ ResultType Object::PropEnum::Next(Var *aName, Var *aVal)
 		if (mIndex[testidx] < testobj->mFields.Length())
 		{
 			auto &testfld = testobj->mFields[mIndex[testidx]];
-			if (!testfld.enumerable && (testidx || !mDebuggerMode)
+			if (!testfld.enumerable
 				|| testfld.symbol == SYM_DYNAMIC && (testfld.prop->NoEnumGet || !testfld.prop->Getter() || is_proto))
 			{
 				++mIndex[testidx]; // Skip this property.
