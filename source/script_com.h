@@ -77,7 +77,6 @@ public:
 	void Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	LPTSTR Type();
 	Object *Base();
-	IObject_DebugWriteProperty_Def;
 
 	void ToVariant(VARIANT &aVar)
 	{

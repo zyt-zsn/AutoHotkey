@@ -1977,37 +1977,3 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 
 	return result_to_return;
 }
-
-
-#ifdef CONFIG_DEBUGGER
-
-void WriteComObjType(IDebugProperties *aDebugger, ComObject *aObject, LPCSTR aName, LPTSTR aWhichType)
-{
-	TCHAR buf[_f_retval_buf_size];
-	ResultToken resultToken;
-	resultToken.symbol = SYM_INTEGER;
-	resultToken.marker_length = -1;
-	resultToken.mem_to_free = NULL;
-	resultToken.buf = buf;
-	ExprTokenType paramToken[] = { aObject, aWhichType };
-	ExprTokenType *param[] = { &paramToken[0], &paramToken[1] };
-	BIF_ComObjType(resultToken, param, 2);
-	aDebugger->WriteProperty(aName, resultToken);
-	if (resultToken.mem_to_free)
-		free(resultToken.mem_to_free);
-}
-
-void ComObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aDepth)
-{
-	DebugCookie rootCookie;
-	aDebugger->BeginProperty(NULL, "object", 2, rootCookie);
-	if (aPage == 0 && aDepth > 0)
-	{
-		// For simplicity, assume aPageSize >= 2.
-		aDebugger->WriteProperty("Value", ExprTokenType(mVal64));
-		aDebugger->WriteProperty("VarType", ExprTokenType((__int64)mVarType));
-	}
-	aDebugger->EndProperty(rootCookie);
-}
-
-#endif

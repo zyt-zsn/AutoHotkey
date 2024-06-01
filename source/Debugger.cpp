@@ -1179,6 +1179,7 @@ int Debugger::WritePropertyObjectXml(PropertyInfo &aProp)
 	return pw.mError;
 }
 
+
 void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aDepth)
 {
 	auto enum_method = IsClassPrototype() ? nullptr : GetMethod(_T("__Enum"));
@@ -1244,6 +1245,15 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 
 	aDebugger->EndProperty(cookie);
 }
+
+
+void IObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth)
+{
+	// Base() should return non-null for all classes which don't override DebugWriteProperty.
+	if (auto base = Base())
+		base->DebugWriteProperty(aDebugger, aPage, aPageSize, aMaxDepth);
+}
+
 
 int Debugger::WriteEnumItems(PropertyInfo &aProp)
 {

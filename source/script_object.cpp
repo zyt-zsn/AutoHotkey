@@ -3927,22 +3927,3 @@ BIF_DECL(Class_New)
 	// any typed properties defined by that one class.  This either releases or returns class_obj:
 	class_obj->ConstructNoInit(aResultToken, aParam, aParamCount, ExprTokenType(class_obj));
 }
-
-
-
-#ifdef CONFIG_DEBUGGER
-
-void IObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth)
-{
-	DebugCookie cookie;
-	aDebugger->BeginProperty(NULL, "object", 0, cookie);
-	//if (aPage == 0)
-	//{
-	//	// This is mostly a workaround for debugger clients which make it difficult to
-	//	// tell when a property contains an object with no child properties of its own:
-	//	aDebugger->WriteProperty("Note", _T("This object doesn't support debugging."));
-	//}
-	aDebugger->EndProperty(cookie);
-}
-
-#endif
