@@ -1070,7 +1070,7 @@ ResultType Var::Append(LPTSTR aStr, VarSizeType aLength)
 
 
 
-void Var::AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength)
+ResultType Var::AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength)
 // Caller provides a new malloc'd memory block (currently must be non-NULL).  That block and its
 // contents are directly hung onto this variable in place of its old block, which is freed (except
 // in the case of VAR_VIRTUAL, in which case the memory is passed to mVV->Set() then freed).
@@ -1080,11 +1080,15 @@ void Var::AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength)
 		return mAliasFor->AcceptNewMem(aNewMem, aLength);
 	if (mType != VAR_NORMAL)
 	{
-		Assign(aNewMem, aLength);
+		auto result = Assign(aNewMem, aLength);
 		free(aNewMem); // Caller gave it to us to take charge of, but we have no further use for it.
+		return result;
 	}
 	else // VAR_NORMAL
+	{
 		_AcceptNewMem(aNewMem, aLength);
+		return OK;
+	}
 }
 
 

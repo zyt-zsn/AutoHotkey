@@ -486,7 +486,7 @@ public:
 	void Free(int aWhenToFree = VAR_ALWAYS_FREE);
 	ResultType Append(LPTSTR aStr, VarSizeType aLength);
 	ResultType AppendIfRoom(LPTSTR aStr, VarSizeType aLength);
-	void AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength);
+	ResultType AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength);
 	void SetLengthFromContents();
 
 	static ResultType BackupFunctionVars(UserFunc &aFunc, VarBkp *&aVarBackup, int &aVarBackupCount);
