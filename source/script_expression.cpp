@@ -1859,8 +1859,11 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 		++mInstances;
 		
 		FreeVars *caller_free_vars = sFreeVars;
-		if (sFreeVars && mOuterFunc && !aUpVars)
-			aUpVars = sFreeVars->ForFunc(mOuterFunc);
+		// The following was originally used to support direct calls while the outer function is running,
+		// but such calls should no longer be possible as the script can only refer to the function via a
+		// Closure, which provides a non-null value for aUpVars:
+		//if (sFreeVars && mOuterFunc && !aUpVars)
+		//	aUpVars = sFreeVars->ForFunc(mOuterFunc);
 
 		if (mDownVarCount)
 		{
