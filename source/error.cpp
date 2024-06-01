@@ -1247,7 +1247,7 @@ void Script::WarnUnassignedVar(Var *var, Line *aLine)
 		return;
 
 	// Currently only the first reference to each var generates a warning even when using
-	// StdOut/OutputDebug, since MarkAlreadyWarned() is used to suppress warnings for any
+	// StdOut/OutputDebug. MarkAlreadyWarned() is also used to suppress warnings for any
 	// var which is checked with IsSet().
 	//if (warnMode == WARNMODE_MSGBOX)
 	{
@@ -1259,11 +1259,11 @@ void Script::WarnUnassignedVar(Var *var, Line *aLine)
 		var->MarkAlreadyWarned();
 	}
 
-	bool isUndeclaredLocal = (var->Scope() & (VAR_LOCAL | VAR_DECLARED)) == VAR_LOCAL;
-	LPCTSTR sameNameAsGlobal = isUndeclaredLocal && FindGlobalVar(var->mName) ? _T("  (same name as a global)") : _T("");
-	TCHAR buf[DIALOG_TITLE_SIZE];
-	sntprintf(buf, _countof(buf), _T("%s %s%s"), Var::DeclarationType(var->Scope()), var->mName, sameNameAsGlobal);
-	ScriptWarning(warnMode, WARNING_ALWAYS_UNSET_VARIABLE, buf, aLine);
+	// No check for a global variable is done because var is unassigned and therefore should
+	// have resolved to a global if there was one, unless it was declared local.
+	TCHAR buf[1024];
+	sntprintf(buf, _countof(buf), _T("This %s appears to never be assigned a value."), Var::DeclarationType(var->Scope()));
+	ScriptWarning(warnMode, buf, var->mName, aLine);
 }
 
 

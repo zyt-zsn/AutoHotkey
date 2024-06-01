@@ -225,7 +225,6 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_SOUND_COMPONENT _T("Component not found")
 #define ERR_SOUND_CONTROLTYPE _T("Component doesn't support this control type")
 #define ERR_TIMEOUT _T("Timeout")
-#define WARNING_ALWAYS_UNSET_VARIABLE _T("This variable appears to never be assigned a value.")
 #define WARNING_LOCAL_SAME_AS_GLOBAL _T("This local variable has the same name as a global variable.")
 
 //----------------------------------------------------------------------------------
