@@ -153,6 +153,9 @@ int Debugger::PreExecLine(Line *aLine)
 	// small amount of complexity in stack_get (which is only called by request of the debugger client):
 	//	mStack.mTop->line = aLine;
 	mCurrLine = aLine;
+
+	if (mProcessingCommands) // Reentry into ProcessCommands() isn't possible, so Break() would be ignored.
+		return DEBUGGER_E_OK; // Skip the rest; in particular, don't delete any temporary breakpoints.
 	
 	// Check for a breakpoint on the current line:
 	Breakpoint *bp = aLine->mBreakpoint;
