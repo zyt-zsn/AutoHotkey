@@ -388,11 +388,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				goto abort_if_result;
 			}
 
-#ifdef CONFIG_DEBUGGER
-			// See PostExecFunctionCall() itself for comments.
-			if (g_Debugger.IsConnected())
-				g_Debugger.PostExecFunctionCall(this);
-#endif
 			g_script.mCurrLine = this; // For error-reporting.
 
 			if (flags & IT_SET)
@@ -2058,7 +2053,11 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 		if (result == OK)
 			result = Execute(&aResultToken); // Execute the body of the function.
 
+#ifdef CONFIG_DEBUGGER
 		DEBUGGER_STACK_POP()
+		if (g_Debugger.IsConnected())
+			g_Debugger.LeaveFunction();
+#endif
 		
 		// Setting this unconditionally isn't likely to perform any worse than checking for EXIT/FAIL,
 		// and likely produces smaller code.  Execute() takes care of translating EARLY_RETURN to OK.

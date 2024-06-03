@@ -194,6 +194,21 @@ int Debugger::PreExecLine(Line *aLine)
 }
 
 
+void Debugger::LeaveFunction()
+{
+	// If the debugger is stepping out from a user-defined function, break at the line
+	// which called the function.  Otherwise, a step might appear to jump from one
+	// function to another called by the same line, or to the next line, or to some line
+	// further up the stack.  Into/Over count as stepping out only if the function we're
+	// leaving is the one in which the step command was issued.
+	if (mInternalState == DIS_StepInto
+		|| ((mInternalState == DIS_StepOut || mInternalState == DIS_StepOver)
+			&& mStack.Depth() < mContinuationDepth) // Always '<' and not '<=' (for StepOver) because we just returned from a function call.
+		&& mStack.mTop > mStack.mBottom) // More than one entry, otherwise mCurrLine has no meaning.
+		PreExecLine(mCurrLine);
+}
+
+
 bool Debugger::PreThrow(ExprTokenType *aException)
 {
 	if (!mBreakOnException)
