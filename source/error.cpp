@@ -986,6 +986,8 @@ ResultType TypeError(LPCTSTR aExpectedType, ExprTokenType &aActualValue)
 {
 	TCHAR number_buf[MAX_NUMBER_SIZE];
 	LPCTSTR actual_type, value_as_string;
+	if (aActualValue.symbol == SYM_VAR && aActualValue.var->IsUninitializedNormalVar())
+		return g_script.VarUnsetError(aActualValue.var);
 	TokenTypeAndValue(aActualValue, actual_type, value_as_string, number_buf);
 	return TypeError(aExpectedType, actual_type, value_as_string);
 }
@@ -1345,7 +1347,7 @@ void Script::WarnUnassignedVar(Var *var, Line *aLine)
 		return;
 
 	// Currently only the first reference to each var generates a warning even when using
-	// StdOut/OutputDebug, since MarkAlreadyWarned() is used to suppress warnings for any
+	// StdOut/OutputDebug. MarkAlreadyWarned() is also used to suppress warnings for any
 	// var which is checked with IsSet().
 	//if (warnMode == WARNMODE_MSGBOX)
 	{
@@ -1357,26 +1359,23 @@ void Script::WarnUnassignedVar(Var *var, Line *aLine)
 		var->MarkAlreadyWarned();
 	}
 
-	bool isUndeclaredLocal = (var->Scope() & (VAR_LOCAL | VAR_DECLARED)) == VAR_LOCAL;
-	LPCTSTR sameNameAsGlobal = isUndeclaredLocal && FindGlobalVar(var->mName) ? _T("  (same name as a global)") : _T("");
-	TCHAR buf[DIALOG_TITLE_SIZE];
-	sntprintf(buf, _countof(buf), _T("%s %s%s"), Var::DeclarationType(var->Scope()), var->mName, sameNameAsGlobal);
-	ScriptWarning(warnMode, WARNING_ALWAYS_UNSET_VARIABLE, buf, aLine);
+	// No check for a global variable is done because var is unassigned and therefore should
+	// have resolved to a global if there was one, unless it was declared local.
+	TCHAR buf[1024];
+	sntprintf(buf, _countof(buf), _T("This %s appears to never be assigned a value."), Var::DeclarationType(var->Scope()));
+	ScriptWarning(warnMode, buf, var->mName, aLine);
 }
 
 
 
 ResultType Script::VarUnsetError(Var *var)
 {
+	TCHAR buf[1024];
 	bool isUndeclaredLocal = (var->Scope() & (VAR_LOCAL | VAR_DECLARED)) == VAR_LOCAL;
-	TCHAR buf[DIALOG_TITLE_SIZE];
-	if (*var->mName) // Avoid showing "Specifically: global " for temporary VarRefs of unspecified scope, such as those used by Array::FromEnumerable or the debugger.
-	{
-		LPCTSTR sameNameAsGlobal = isUndeclaredLocal && FindGlobalVar(var->mName) ? _T("  (same name as a global)") : _T("");
-		sntprintf(buf, _countof(buf), _T("%s %s%s"), Var::DeclarationType(var->Scope()), var->mName, sameNameAsGlobal);
-	}
-	else *buf = '\0';
-	return RuntimeError(ERR_VAR_UNSET, buf, FAIL_OR_OK, nullptr, ErrorPrototype::Unset);
+	bool sameNameAsGlobal = isUndeclaredLocal && FindGlobalVar(var->mName);
+	sntprintf(buf, _countof(buf), _T("This %s has not been assigned a value.%s"), Var::DeclarationType(var->Scope())
+		, sameNameAsGlobal ? _T("\nA global declaration inside the function may be required.") : _T(""));
+	return RuntimeError(buf, var->mName, FAIL_OR_OK, nullptr, ErrorPrototype::Unset);
 }
 
 

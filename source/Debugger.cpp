@@ -178,6 +178,9 @@ int Debugger::PreExecLine(Line *aLine)
 	// small amount of complexity in stack_get (which is only called by request of the debugger client):
 	//	mStack.mTop->line = aLine;
 	mCurrLine = aLine;
+
+	if (mProcessingCommands) // Reentry into ProcessCommands() isn't possible, so Break() would be ignored.
+		return DEBUGGER_E_OK; // Skip the rest; in particular, don't delete any temporary breakpoints.
 	
 	// Check for a breakpoint on the current line:
 	Breakpoint *bp = aLine->mBreakpoint;
@@ -216,6 +219,21 @@ int Debugger::PreExecLine(Line *aLine)
 	}
 	
 	return DEBUGGER_E_OK;
+}
+
+
+void Debugger::LeaveFunction()
+{
+	// If the debugger is stepping out from a user-defined function, break at the line
+	// which called the function.  Otherwise, a step might appear to jump from one
+	// function to another called by the same line, or to the next line, or to some line
+	// further up the stack.  Into/Over count as stepping out only if the function we're
+	// leaving is the one in which the step command was issued.
+	if (mInternalState == DIS_StepInto
+		|| ((mInternalState == DIS_StepOut || mInternalState == DIS_StepOver)
+			&& mStack.Depth() < mContinuationDepth) // Always '<' and not '<=' (for StepOver) because we just returned from a function call.
+		&& mStack.mTop > mStack.mBottom) // More than one entry, otherwise mCurrLine has no meaning.
+		PreExecLine(mCurrLine);
 }
 
 
