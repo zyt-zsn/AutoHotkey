@@ -917,6 +917,9 @@ ResultType Script::SetTrayIcon(LPCTSTR aIconFile, int aIconNumber, ToggleValueTy
 	if ( !new_icon )
 		return g_script.RuntimeError(ERR_LOAD_ICON, aIconFile);
 
+	SendMessage(g_hWnd, WM_SETICON, ICON_SMALL, (LPARAM)new_icon_small);
+	SendMessage(g_hWnd, WM_SETICON, ICON_BIG, (LPARAM)new_icon);
+
 	GuiType::DestroyIconsIfUnused(mCustomIcon, mCustomIconSmall); // This destroys it if non-NULL and it's not used by an GUI windows.
 
 	mCustomIcon = new_icon;
