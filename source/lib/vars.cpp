@@ -670,6 +670,8 @@ BIV_DECL_R(BIV_ScreenDPI)
 
 BIV_DECL_R(BIV_TrayMenu)
 {
+	if (!g_script.mTrayMenu)
+		_f_return_unset;
 	g_script.mTrayMenu->AddRef();
 	_f_return(g_script.mTrayMenu);
 }
