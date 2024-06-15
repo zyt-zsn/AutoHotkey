@@ -79,6 +79,17 @@ static key_type *ksc = NULL;
 #define KSCM_SIZE ((MODLR_MAX + 1)*(SC_ARRAY_COUNT))
 
 
+static vk_type sPendingDeadKeyVK = 0;
+static sc_type sPendingDeadKeySC = 0; // Need to track this separately because sometimes default VK-to-SC mapping isn't correct.
+static bool sPendingDeadKeyUsedShift = false;
+static bool sPendingDeadKeyUsedAltGr = false;
+
+static vk_type sChainedDeadKeyVK = 0;
+static sc_type sChainedDeadKeySC = 0;
+static bool sChainedDeadKeyUsedShift = false;
+static bool sChainedDeadKeyUsedAltGr = false;
+	
+
 // Notes about fake shift-key events (there used to be some related variables defined here,
 // but they were superseded by SC_FAKE_LSHIFT and SC_FAKE_RSHIFT):
 // Used to help make a workaround for the way the keyboard driver generates physical
@@ -307,6 +318,9 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	WPARAM hotkey_id_to_post = HOTKEY_ID_INVALID; // Set default.
 	bool is_ignored = IsIgnored(aExtraInfo);
 
+	CollectInputState collect_input_state;
+	collect_input_state.early_collected = false;
+
 	// The following is done for more than just convenience.  It solves problems that would otherwise arise
 	// due to the value of a global var such as KeyHistoryNext changing due to the reentrancy of
 	// this procedure.  For example, a call to KeyEvent() in here would alter the value of
@@ -431,6 +445,14 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 
 	// The following is done even if key history is disabled because sAltTabMenuIsVisible relies on it:
 	pKeyHistoryCurr->event_type = is_ignored ? 'i' : (is_artificial ? 'a' : ' '); // v1.0.42.04: 'a' was added, but 'i' takes precedence over 'a'.
+
+	// v2.1: Process any InputHooks which have the H option.  This requires translating the event to text, which
+	// is done only once for each event.  If there are no InputHooks with the H option, the translation is done
+	// later to avoid any change in behaviour compared to v2.0 (such as dead keys affecting the translation prior
+	// to being suppressed by a hotkey), or not done at all if the event is suppressed by other means.
+	if (aHook == g_KeybdHook && g_inputBeforeHotkeysCount
+		&& !EarlyCollectInput(*(PKBDLLHOOKSTRUCT)lParam, aVK, aSC, aKeyUp, is_ignored, collect_input_state, pKeyHistoryCurr))
+		return SuppressThisKey;
 
 	// v1.0.43: Block the Win keys during journal playback to prevent keystrokes hitting the Start Menu
 	// if the user accidentally presses one of those keys during playback.  Note: Keys other than Win
@@ -1945,7 +1967,7 @@ LRESULT SuppressThisKeyFunc(const HHOOK aHook, LPARAM lParam, const vk_type aVK,
 
 
 LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, const vk_type aVK, const sc_type aSC
-	, bool aKeyUp, ULONG_PTR aExtraInfo, KeyHistoryItem *pKeyHistoryCurr, WPARAM aHotkeyIDToPost)
+	, bool aKeyUp, ULONG_PTR aExtraInfo, CollectInputState &aCollectInput, KeyHistoryItem *pKeyHistoryCurr, WPARAM aHotkeyIDToPost)
 // Always use the parameter vk rather than event.vkCode because the caller or caller's caller
 // might have adjusted vk, namely to make it a left/right specific modifier key rather than a
 // neutral one.
@@ -2010,7 +2032,7 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 		}
 
 		if ((Hotstring::sEnabledCount && !is_ignored) || g_input)
-			if (!CollectInput(event, aVK, aSC, aKeyUp, is_ignored, pKeyHistoryCurr, hs_wparam_to_post, hs_lparam_to_post)) // Key should be invisible (suppressed).
+			if (!CollectInput(event, aVK, aSC, aKeyUp, is_ignored, aCollectInput, pKeyHistoryCurr, hs_wparam_to_post, hs_lparam_to_post)) // Key should be invisible (suppressed).
 				return SuppressThisKeyFunc(aHook, lParam, aVK, aSC, aKeyUp, aExtraInfo, pKeyHistoryCurr, aHotkeyIDToPost, hs_wparam_to_post, hs_lparam_to_post);
 
 		// Do this here since the above "return SuppressThisKey" will have already done it in that case.
@@ -2197,42 +2219,47 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 
 
 
-bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC, bool aKeyUp, bool aIsIgnored
-	, KeyHistoryItem *pKeyHistoryCurr, WPARAM &aHotstringWparamToPost, LPARAM &aHotstringLparamToPost)
-// Caller is responsible for having initialized aHotstringWparamToPost to HOTSTRING_INDEX_INVALID.
-// Returns true if the caller should treat the key as visible (non-suppressed).
-// Always use the parameter vk rather than event.vkCode because the caller or caller's caller
-// might have adjusted vk, namely to make it a left/right specific modifier key rather than a
-// neutral one.
+bool CollectKeyUp(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC, bool aEarly)
 {
-	// Transcription is done only once for all layers, so do this if any layer requests it:
-	bool transcribe_modified_keys = false;
-
 	for (auto *input = g_input; input; input = input->Prev)
 	{
-		if (input->InProgress() && input->IsInteresting(aEvent))
+		if (input->IsEarly() == aEarly && input->IsInteresting(aEvent) && input->InProgress())
 		{
-			if (   aKeyUp && input->ScriptObject && input->ScriptObject->onKeyUp
+			if (   input->ScriptObject && input->ScriptObject->onKeyUp
 				&& ( ((input->KeySC[aSC] | input->KeyVK[aVK]) & INPUT_KEY_NOTIFY)
 					|| input->NotifyNonText && !((input->KeyVK[aVK]) & INPUT_KEY_IS_TEXT) )   )
 			{
 				PostMessage(g_hWnd, AHK_INPUT_KEYUP, (WPARAM)input, (aSC << 16) | aVK);
 			}
-			if (aKeyUp && (input->KeySC[aSC] & INPUT_KEY_DOWN_SUPPRESSED))
+			if (input->KeySC[aSC] & INPUT_KEY_DOWN_SUPPRESSED)
 			{
 				input->KeySC[aSC] &= ~INPUT_KEY_DOWN_SUPPRESSED;
 				return false;
 			}
-			if (aKeyUp && (input->KeyVK[aVK] & INPUT_KEY_DOWN_SUPPRESSED))
+			if (input->KeyVK[aVK] & INPUT_KEY_DOWN_SUPPRESSED)
 			{
 				input->KeyVK[aVK] &= ~INPUT_KEY_DOWN_SUPPRESSED;
 				return false;
 			}
-
-			if (input->TranscribeModifiedKeys)
-				transcribe_modified_keys = true;
 		}
 	}
+	return true;
+}
+
+
+
+bool EarlyCollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC, bool aKeyUp, bool aIsIgnored
+	, CollectInputState &aState, KeyHistoryItem *pKeyHistoryCurr)
+// Returns true if the caller should treat the key as visible (non-suppressed).
+// Always use the parameter aVK rather than event.vkCode because the caller or caller's caller
+// might have adjusted aVK, such as to make it a left/right specific modifier key rather than a
+// neutral one.
+{
+	aState.early_collected = true;
+	aState.char_count = 0;
+
+	if (aKeyUp && !CollectKeyUp(aEvent, aVK, aSC, true))
+		return false;
 
 	// The checks above suppress key-up if key-down was suppressed and the Input is still active.
 	// Otherwise, avoid suppressing key-up since it may result in the key getting stuck down.
@@ -2241,17 +2268,6 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// up-event should not be suppressed otherwise the modifier key would get "stuck down".  
 	if (aKeyUp)
 		return true;
-
-	static vk_type sPendingDeadKeyVK = 0;
-	static sc_type sPendingDeadKeySC = 0; // Need to track this separately because sometimes default VK-to-SC mapping isn't correct.
-	static bool sPendingDeadKeyUsedShift = false;
-	static bool sPendingDeadKeyUsedAltGr = false;
-
-	// tracking of chained dead keys
-	static vk_type sChainedDeadKeyVK = 0;
-	static sc_type sChainedDeadKeySC = 0;
-	static bool sChainedDeadKeyUsedShift = false;
-	static bool sChainedDeadKeyUsedAltGr = false;
 	
 	bool transcribe_key = true;
 	
@@ -2266,8 +2282,8 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// might still be holding down a modifier, such as :*:<t>::Test (if '>' requires shift key).
 	// It might also fix other issues.
 	if ((g_modifiersLR_logical & ~(MOD_LSHIFT | MOD_RSHIFT)) // At least one non-Shift modifier is down (Shift may also be down).
-		&& !transcribe_modified_keys
 		&& !((g_modifiersLR_logical & (MOD_LALT | MOD_RALT)) && (g_modifiersLR_logical & (MOD_LCONTROL | MOD_RCONTROL))))
+	{
 		// Since in some keybd layouts, AltGr (Ctrl+Alt) will produce valid characters (such as the @ symbol,
 		// which is Ctrl+Alt+Q in the German/IBM layout and Ctrl+Alt+2 in the Spanish layout), an attempt
 		// will now be made to transcribe all of the following modifier combinations:
@@ -2281,7 +2297,18 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		// normally be excluded from the input (except those rare ones that have only SHIFT as a modifier).
 		// Note that ToAsciiEx() will translate ^i to a tab character, !i to plain i, and many other modified
 		// letters as just the plain letter key, which we don't want.
-		transcribe_key = false;
+		for (auto *input = g_input; ; input = input->Prev)
+		{
+			if (!input) // No inputs left, and none were found that meet the conditions below.
+			{
+				transcribe_key = false;
+				break;
+			}
+			// Transcription is done only once for all layers, so do this if any layer requests it:
+			if (input->TranscribeModifiedKeys && input->InProgress() && input->IsInteresting(aEvent))
+				break;
+		}
+	}
 
 	// v1.1.28.00: active_window is set to the focused control, if any, so that the hotstring buffer is reset
 	// when the focus changes between controls, not just between windows.
@@ -2290,6 +2317,8 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// See Get_active_window_keybd_layout macro definition for related comments.
 	HWND active_window = GetForegroundWindow(); // Set default in case there's no focused control.
 	HKL active_window_keybd_layout = GetKeyboardLayout(GetFocusedCtrlThread(NULL, active_window));
+	aState.active_window = active_window;
+	aState.keyboard_layout = active_window_keybd_layout;
 
 	// Univeral Windows Platform apps apparently have their own handling for dead keys:
 	//  - Dead key followed by Esc produces Chr(27), unlike non-UWP apps.
@@ -2376,10 +2405,43 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		else // Assume standard Win32 behaviour as described above.
 			--char_count; // Remove '\b' to simplify the backspacing and collection stages.
 	}
+
+	aState.ch[0] = ch[0];
+	aState.ch[1] = ch[1];
+	aState.char_count = char_count;
 	
-	if (!CollectInputHook(aEvent, aVK, aSC, ch, char_count, aIsIgnored))
+	if (!CollectInputHook(aEvent, aVK, aSC, ch, char_count, aIsIgnored, true))
 		return false; // Suppress.
+	return true; // Visible.
+}
+
+
+
+bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC, bool aKeyUp, bool aIsIgnored
+	, CollectInputState &aState, KeyHistoryItem *pKeyHistoryCurr, WPARAM &aHotstringWparamToPost, LPARAM &aHotstringLparamToPost)
+// Caller is responsible for having initialized aHotstringWparamToPost to HOTSTRING_INDEX_INVALID.
+// Returns true if the caller should treat the key as visible (non-suppressed).
+// Always use the parameter aVK rather than event.vkCode because the caller or caller's caller
+// might have adjusted aVK, such as to make it a left/right specific modifier key rather than a
+// neutral one.
+{
+	if (!aState.early_collected && !EarlyCollectInput(aEvent, aVK, aSC, aKeyUp, aIsIgnored, aState, pKeyHistoryCurr))
+		return false;
+
+	if (aKeyUp)
+		return CollectKeyUp(aEvent, aVK, aSC, false);
+
+	BYTE key_state[256];
+	ZeroMemory(key_state, 256);
+
+	TCHAR ch[2] { aState.ch[0], aState.ch[1] };
+	int char_count = aState.char_count;
+	HWND active_window = aState.active_window;
+	HKL active_window_keybd_layout = aState.keyboard_layout;
 	
+	if (!CollectInputHook(aEvent, aVK, aSC, ch, char_count, aIsIgnored, false))
+		return false; // Suppress.
+
 	// More notes about dead keys: The dead key behavior of Enter/Space/Backspace is already properly
 	// maintained when an Input or hotstring monitoring is in effect.  In addition, keys such as the
 	// following already work okay (i.e. the user can press them in between the pressing of a dead
@@ -2555,6 +2617,8 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// the letter "a" to produce á.
 	if (dead_key_sequence_complete)
 	{
+		AdjustKeyState(key_state, g_modifiersLR_logical);
+
 		// Fix for v1.1.34.03: Avoid reinserting the dead char if it wasn't actually in the buffer
 		// (which can happen if there's another keyboard hook that removed it due to a suppressed
 		// hotstring end-char).
@@ -2577,14 +2641,12 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 			// replay the chained dead key if needed
 			if (sChainedDeadKeyVK)
 			{
-				ZeroMemory(key_state, 256);
 				AdjustKeyState(key_state
 					, (sChainedDeadKeyUsedAltGr ? MOD_LCONTROL | MOD_RALT : 0)
 					| (sChainedDeadKeyUsedShift ? MOD_RSHIFT : 0)); // Left vs Right Shift probably doesn't matter in this context.
 				ToUnicodeOrAsciiEx(sChainedDeadKeyVK, sChainedDeadKeySC, key_state, temp_ch, 0, active_window_keybd_layout);
 			}
 
-			ZeroMemory(key_state, 256);
 			AdjustKeyState(key_state
 				, (sPendingDeadKeyUsedAltGr ? MOD_LCONTROL | MOD_RALT : 0)
 				| (sPendingDeadKeyUsedShift ? MOD_RSHIFT : 0)); // Left vs Right Shift probably doesn't matter in this context.
@@ -2901,12 +2963,12 @@ bool CollectHotstring(KBDLLHOOKSTRUCT &aEvent, TCHAR ch[], int char_count, HWND 
 
 
 bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC, TCHAR aChar[], int aCharCount
-	, bool aIsIgnored)
+	, bool aIsIgnored, bool aEarly)
 {
 	auto *input = g_input;
 	for (; input; input = input->Prev)
 	{
-		if (!input->InProgress() || !input->IsInteresting(aEvent))
+		if (  !(input->IsEarly() == aEarly && input->IsInteresting(aEvent) && input->InProgress())  )
 			continue;
 		
 		UCHAR key_flags = input->KeyVK[aVK] | input->KeySC[aSC];

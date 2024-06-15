@@ -154,6 +154,7 @@ extern TCHAR g_EndChars[HS_MAX_END_CHARS + 1];
 
 // Global objects:
 extern input_type *g_input;
+extern int g_inputBeforeHotkeysCount;
 EXTERN_SCRIPT;
 EXTERN_CLIPBOARD;
 EXTERN_OSVER;

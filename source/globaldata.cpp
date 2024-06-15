@@ -176,6 +176,7 @@ TCHAR g_EndChars[HS_MAX_END_CHARS + 1] = _T("-()[]{}:;'\"/\\,.?!\n \t");  // Hot
 
 // Global objects:
 input_type *g_input = NULL;
+int g_inputBeforeHotkeysCount = 0;
 Script g_script;
 // This made global for performance reasons (determining size of clipboard data then
 // copying contents in or out without having to close & reopen the clipboard in between):
