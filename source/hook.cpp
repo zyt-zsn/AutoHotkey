@@ -2454,11 +2454,15 @@ bool EarlyCollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type
 
 	// If Backspace is pressed after a dead key, ch[0] is the "dead" char and ch[1] is '\b'.
 	// Testing shows that this can be handled a number of ways (we only support 1 & 2):
-	// 1. Most Win32 apps perform backspacing and THEN insert ch[0].
+	// 1. Insert ch[0] and then apply backspacing.  This is subtly different from doing nothing
+	//    in that if there is a selection, it is deleted.  This appears to be how Edit controls
+	//    behave on Windows 11 22H2, 10 22H2 and 7 (in a VM).
 	// 2. UWP apps perform backspacing and discard the pending dead key.
+	//    (VS2022 does as well, but we don't do anything to support that.)
 	// 3. VS2015 performs backspacing and leaves the dead key in the buffer.
 	// 4. MarkdownPad 2 prints the dead char as if Space was pressed, and does no backspacing.
-	// 5. Unconfirmed: some apps might do nothing; i.e. print the dead char and then delete it.
+	// 5. In 2019, Lexikos noted that Win32 apps performed backspacing and THEN inserted ch[0].
+	//    This might have only applied to Windows 10 builds around that time.
 	if (aVK == VK_BACK && char_count > 0)
 	{
 		if (sUwpAppFocused)
@@ -2900,6 +2904,11 @@ bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 			}
 		}
 		
+		// Collect before backspacing, so if VK_BACK was preceded by a dead key, we delete it instead of the
+		// previous char.  For example, {vkDE}{BS} on the US-Intl layout produces '\b (but we discarded \b).
+		if (collect_chars)
+			input->CollectChar(aChar, aCharCount);
+
 		// Fix for v2.0: Shift is allowed as it generally has no effect on the native function of Backspace.
 		// This is probably connected with the fact that Shift+BS is also transcribed to `b, which we don't want.
 		if (aVK == VK_BACK && input->BackspaceIsUndo
@@ -2911,9 +2920,6 @@ bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 				visible = input->VisibleText; // Override VisibleNonText.
 			// Fall through to the check below in case this {BS} completed a dead key sequence.
 		}
-
-		if (collect_chars)
-			input->CollectChar(aChar, aCharCount);
 
 		if (input->NotifyNonText)
 		{
