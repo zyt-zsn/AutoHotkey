@@ -286,7 +286,7 @@ struct KeyHistoryItem
 
 struct CollectInputState
 {
-	bool early_collected;
+	bool early_collected, used_dead_key_non_destructively;
 	TCHAR ch[2];
 	int char_count;
 	HWND active_window;
