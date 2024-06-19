@@ -996,9 +996,9 @@ ResultType Script::AutoExecSection()
 	ResultType result = OK;
 
 	// Execute all modules, in reverse order of creation.
-	for (mCurrentModule = mLastModule; mCurrentModule; mCurrentModule = mCurrentModule->mPrev)
+	for (auto mod = mLastModule; mod; mod = mod->mPrev)
 	{
-		result = ExecuteModule(mCurrentModule);
+		result = ExecuteModule(mod);
 		if (result != OK)
 			break;
 	}
@@ -1037,6 +1037,7 @@ ResultType Script::ExecuteModule(ScriptModule *aModule)
 		if (result != OK)
 			return result;
 	}
+	mCurrentModule = aModule;
 	return aModule->mFirstLine->ExecUntil(UNTIL_RETURN);
 }
 
