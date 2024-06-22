@@ -39,7 +39,7 @@ ResultType Script::ParseModuleDirective(LPCTSTR aName)
 	mod->Warn_Unreachable = mCurrentModule->Warn_Unreachable;
 	mod->Warn_VarUnset = mCurrentModule->Warn_VarUnset;
 	if (!mModules.Insert(mod, at))
-		return FAIL;
+		return MemoryError();
 	CloseCurrentModule();
 	mCurrentModule = mod;
 	return CONDITION_TRUE;
@@ -151,7 +151,8 @@ ResultType Script::ResolveImports(ScriptImport &imp)
 		}
 	}
 
-	if (  !(imp.mod = mModules.Find(mod_name))  )
+	int at;
+	if (  !(imp.mod = mModules.Find(mod_name, &at))  )
 	{
 		if (auto path = FindLibraryFile(mod_name, _tcslen(mod_name), true))
 		{
@@ -159,6 +160,8 @@ ResultType Script::ResolveImports(ScriptImport &imp)
 			auto last_mod = mLastModule;
 			mLastModule = nullptr; // Start a new chain.
 			imp.mod = mCurrentModule = new ScriptModule(mod_name);
+			if (!mModules.Insert(imp.mod, at))
+				return MemoryError();
 			if (!LoadIncludedFile(path, false, false))
 				return FAIL;
 			if (!CloseCurrentModule())
