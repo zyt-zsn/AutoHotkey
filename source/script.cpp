@@ -179,6 +179,7 @@ VarEntry g_BIV_A[] =
 	A_(EndChar),
 	A_w(EventInfo),
 	A_w(FileEncoding),
+	A_(HotIf),
 	A_wx(HotkeyInterval, BIV_Hotkey, BIV_Hotkey_Set),
 	A_wx(HotkeyModifierTimeout, BIV_Hotkey, BIV_Hotkey_Set),
 	A_x(Hour, BIV_DateTime),

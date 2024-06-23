@@ -1419,6 +1419,14 @@ BIV_DECL_R(BIV_EndChar)
 
 
 
+void SetHotIfReturnValue(ResultToken &aResultToken);
+BIV_DECL_R(BIV_HotIf)
+{
+	SetHotIfReturnValue(aResultToken);
+}
+
+
+
 BIV_DECL_R(BIV_EventInfo)
 // We're returning the length of the var's contents, not the size.
 {

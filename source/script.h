@@ -2555,6 +2555,7 @@ BIV_DECL_R (BIV_PriorHotkey);
 BIV_DECL_R (BIV_TimeSinceThisHotkey);
 BIV_DECL_R (BIV_TimeSincePriorHotkey);
 BIV_DECL_R (BIV_EndChar);
+BIV_DECL_R (BIV_HotIf);
 BIV_DECL_RW(BIV_EventInfo);
 BIV_DECL_R (BIV_TimeIdle);
 BIV_DECL_R (BIV_IPAddress);
