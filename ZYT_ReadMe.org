@@ -1,0 +1,5 @@
+* WinVol.exe: compiled from WinVol.ahk(Reference: https://lists.defectivebydesign.org/archive/html/emms-help/2019-01/msg00023.html)
+**  To compile WinVol.ahk, makesure
+   1. AutoHotkey_2.0.18_setup.exe(Download from official site:https://autohotkey.com/) is correctly installed
+   2. Ahk2Exe.exe(https://github.com/AutoHotkey/Ahk2Exe/releases/tag/Ahk2Exe1.1.37.02a0) is place in AutoHotKey's subdirectory "Compiler"
+* Put winVol.exe into system path.
