@@ -12,13 +12,15 @@
       (setq amount (concat "+" (number-to-string amount)))
     (setq amount (number-to-string amount)))
   (message "Current playback: %s"
-	   (with-temp-buffer
-	     (when (zerop (shell-command (concat (expand-file-name emms-winvol-program)
-						 " " amount)
-					 (current-buffer)))
-	       (if (progn (goto-char (point-min))
-			  (re-search-forward "[0-9]+%" nil t))
-		   (match-string 0))))))
+		   (with-temp-buffer
+			 (progn (zerop (shell-command (concat (expand-file-name (executable-find emms-winvol-program))
+												  " " amount)
+										  (current-buffer)))
+					(if (progn (goto-char (point-min))
+							   (re-search-forward "[0-9]+%" nil t))
+						(match-string 0))))))
+
+(setq emms-volume-change-function #'emms-volume-winvol-change)
 
 (provide 'emms-volume-winvol)
 

@@ -9,13 +9,13 @@
 
 ; Jordan Wilson, 27/01/2019
 
-; Modified by zyt, <2024-09-25 ÖÜÈý>
+; Modified by zyt, <2024-09-25 å‘¨ä¸‰>
 
 master_volume := SoundGetVolume()
 if A_Args.Length < 1
 {
 	FileAppend "Need a signed percentage (if amending volume) or a number (if setting outright)`r`n", "*"
-	ExitApp
+	ExitApp 1
 }
 else
 {
@@ -23,4 +23,5 @@ else
 	curVol := SoundGetVolume()
 	curVol := Round(curVol)
 	FileAppend ("Volume: " curVol "%`r`n"), "*"
+	ExitApp curVol
 }
